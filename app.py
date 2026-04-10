@@ -136,13 +136,11 @@ def load_settings():
             threshold_var.set(settings["threshold"])
             
         if "keywords" in settings:
-            # 現在のUIをクリア
             for row in list(keyword_ui_frames):
                 row.destroy()
             keyword_entries.clear()
             keyword_ui_frames.clear()
             
-            # 保存データから復元
             for kw_data in settings["keywords"]:
                 add_keyword_row(
                     kw=kw_data.get("kw", ""),
@@ -317,7 +315,6 @@ class PreviewDialog(Toplevel):
             try: self.attributes('-zoomed', True)
             except: pass
 
-        self.transient(parent)
         self.grab_set()
         
         self.on_complete = on_complete
@@ -359,7 +356,6 @@ class PreviewDialog(Toplevel):
         Button(btn_frame, text="＋ 設定を追加して次へ", command=self.confirm, bg="#0D6EFD", fg="white", font=("Meiryo UI", 10, "bold"), padx=10).pack(side=LEFT, padx=5)
         Button(btn_frame, text="完了して閉じる", command=self.destroy, bg="#6C757D", fg="white", font=("Meiryo UI", 10, "bold"), padx=10).pack(side=LEFT, padx=5)
         
-        # --- リアルタイム抽出プレビュー表示バー ---
         preview_bar = Frame(self, bg="#D1E7DD", pady=8, padx=15)
         preview_bar.pack(fill=X)
         self.preview_label = Label(preview_bar, text="【抽出プレビュー】 1. まずは図面内の基準にする文字をクリックしてください", font=("Meiryo UI", 12, "bold"), bg="#D1E7DD", fg="#0F5132")
@@ -587,7 +583,6 @@ class PreviewDialog(Toplevel):
         
         self.on_complete(kw_text, "左下", xmin, xmax, ymin, ymax, ext_text)
         
-        # 連続追加のためのリセット
         self.anchor = None
         self.rect_dxf_start = None
         self.rect_dxf_end = None
@@ -882,6 +877,15 @@ root = Tk()
 root.title(f"{APP_TITLE} {VERSION}")
 root.geometry("860x850")
 root.minsize(800, 600)
+
+try:
+    root.state('zoomed')
+except:
+    try:
+        root.attributes('-zoomed', True)
+    except:
+        pass
+
 root.configure(bg="#F8F9FA")
 
 style = ttk.Style()
