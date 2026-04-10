@@ -12,7 +12,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Python環境のセットアップ（安定した3.11を使用）
+    # Python環境のセットアップ
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -25,20 +25,24 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
-    # PyInstallerでexe化の実行 (モジュール分割に対応)
+    # PyInstallerでexe化の実行 (ファイルの存在を自動チェックしてエラーを回避)
     - name: Build with PyInstaller
-      run: >
-        pyinstaller 
-        --onefile 
-        --noconsole 
-        --clean 
-        --name "DxfExtractionMiya-v1.0.0" 
-        --icon="icon.ico"
-        --add-data "readme.md;."
-        --add-data "icon.ico;."
-        app.py
+      shell: pwsh
+      run: |
+        $cmd = "pyinstaller --onefile --noconsole --clean --name `"DxfExtractionMiya-v1.0.0`""
+        
+        # READMEの存在確認 (大文字・小文字両対応)
+        if (Test-Path "README.md") { $cmd += " --add-data `"README.md;.`"" }
+        elseif (Test-Path "readme.md") { $cmd += " --add-data `"readme.md;.`"" }
+        
+        # アイコンの存在確認
+        if (Test-Path "icon.ico") { $cmd += " --add-data `"icon.ico;.`" --icon `"icon.ico`"" }
+        
+        $cmd += " app.py"
+        Write-Host "実行するコマンド: $cmd"
+        Invoke-Expression $cmd
 
-    # 完成したexeファイルをGitHub上にアップロード
+    # 完成したexeファイルをアップロード
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
