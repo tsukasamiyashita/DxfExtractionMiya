@@ -138,6 +138,11 @@ def _get_current_settings_dict():
     global current_mode, selected_files, selected_folder
     kw_list = []
     for row in keyword_entries:
+        try:
+            replaces = json.loads(row["replaces_var"].get())
+        except:
+            replaces = []
+            
         kw_list.append({
             "col": row["col_var"].get(),
             "format": row["format_var"].get(),
@@ -147,8 +152,7 @@ def _get_current_settings_dict():
             "ymax": row["ymax_var"].get(),
             "sample": row.get("sample_text", ""),
             "exclude": row["exclude_var"].get(),
-            "replace_before": row["replace_before_var"].get(),
-            "replace_after": row["replace_after_var"].get()
+            "replaces": replaces
         })
 
     geom = root.geometry()
@@ -242,6 +246,16 @@ def _apply_settings_dict(settings, apply_env=False):
         keyword_ui_frames.clear()
         
         for kw_data in settings["keywords"]:
+            # 古い設定ファイルからの互換性対応
+            replaces = kw_data.get("replaces")
+            if replaces is None:
+                rb = kw_data.get("replace_before", "")
+                ra = kw_data.get("replace_after", "")
+                if rb:
+                    replaces = [{"before": rb, "after": ra}]
+                else:
+                    replaces = []
+                    
             add_keyword_row(
                 col=kw_data.get("col", ""),
                 format_type=kw_data.get("format", "標準"),
@@ -251,8 +265,7 @@ def _apply_settings_dict(settings, apply_env=False):
                 ymax=kw_data.get("ymax", 0.0),
                 sample_text=kw_data.get("sample", ""),
                 exclude_text=kw_data.get("exclude", ""),
-                replace_before=kw_data.get("replace_before", ""),
-                replace_after=kw_data.get("replace_after", "")
+                replaces=replaces
             )
     
     root.update_idletasks()
@@ -365,13 +378,13 @@ def open_preview():
         messagebox.showwarning("警告", "対象内にDXFファイルが見つかりません。")
         return
         
-    def on_preview_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replace_before, replace_after):
+    def on_preview_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replaces):
         base_kw_var.set(kw_text)
         base_kw2_var.set(kw2_text)
         base_dist_var.set(base_dist)
         if not col_name:
             col_name = f"抽出列{len(keyword_entries) + 1}"
-        add_keyword_row(col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replace_before, replace_after)
+        add_keyword_row(col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replaces)
 
     PreviewDialog(root, target_dxf, on_preview_complete, base_kw_var.get(), base_kw2_var.get())
 
@@ -405,8 +418,12 @@ def extract_dxf_text():
             
         col_name = cfg["col_var"].get().strip()
         exclude_str = cfg["exclude_var"].get().strip()
-        replace_before_str = cfg["replace_before_var"].get()
-        replace_after_str = cfg["replace_after_var"].get()
+        
+        try:
+            reps = json.loads(cfg["replaces_var"].get())
+        except:
+            reps = []
+            
         if not col_name:
             col_name = f"列{keyword_entries.index(cfg)+1}"
             
@@ -416,8 +433,7 @@ def extract_dxf_text():
             "xmin": xmin, "xmax": xmax,
             "ymin": ymin, "ymax": ymax,
             "exclude": exclude_str,
-            "replace_before": replace_before_str,
-            "replace_after": replace_after_str
+            "replaces": reps
         })
 
     prog_win = ProgressWindow(root, "DXFテキスト抽出")
@@ -551,8 +567,57 @@ def show_version():
     )
 
 # ==========================
-# UI構築
+# UI構築とヘルパー関数
 # ==========================
+def open_replace_dialog(parent_win, replaces_var, on_update_cb, btn_widget):
+    dlg = Toplevel(parent_win)
+    dlg.title("詳細置換設定 (最大10件)")
+    dlg.geometry("320x400")
+    dlg.grab_set()
+    dlg.resizable(False, False)
+    
+    Label(dlg, text="置換前 ⇒ 置換後（上から順に適用されます）", font=("Meiryo UI", 9)).pack(pady=(10, 5))
+    
+    try:
+        current_replaces = json.loads(replaces_var.get())
+    except:
+        current_replaces = []
+        
+    entries = []
+    frame = Frame(dlg)
+    frame.pack(fill=BOTH, expand=True, padx=10)
+    
+    for i in range(10):
+        row_f = Frame(frame)
+        row_f.pack(fill=X, pady=2)
+        Label(row_f, text=f"{i+1}:", font=("Meiryo UI", 9), width=3).pack(side=LEFT)
+        v_b = StringVar()
+        v_a = StringVar()
+        if i < len(current_replaces):
+            v_b.set(current_replaces[i].get("before", ""))
+            v_a.set(current_replaces[i].get("after", ""))
+            
+        Entry(row_f, textvariable=v_b, width=12).pack(side=LEFT, padx=2)
+        Label(row_f, text="⇒", font=("Meiryo UI", 9)).pack(side=LEFT)
+        Entry(row_f, textvariable=v_a, width=12).pack(side=LEFT, padx=2)
+        entries.append((v_b, v_a))
+        
+    def save():
+        new_replaces = []
+        for v_b, v_a in entries:
+            b = v_b.get()
+            a = v_a.get()
+            if b:
+                new_replaces.append({"before": b, "after": a})
+        replaces_var.set(json.dumps(new_replaces))
+        if btn_widget:
+            btn_widget.config(text=f"⚙ 設定 ({len(new_replaces)})")
+        if on_update_cb:
+            on_update_cb()
+        dlg.destroy()
+        
+    Button(dlg, text="保存して閉じる", command=save, bg="#0D6EFD", fg="white", font=("Meiryo UI", 9, "bold")).pack(pady=10)
+
 root = Tk()
 root.title(f"{APP_TITLE} {VERSION}")
 root.geometry("860x850")
@@ -705,7 +770,10 @@ kw_list_frame.pack(fill=X, pady=5)
 keyword_entries = []     # 内部データ用
 keyword_ui_frames = []   # UI削除用
 
-def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text="", exclude_text="", replace_before="", replace_after=""):
+def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text="", exclude_text="", replaces=None):
+    if replaces is None:
+        replaces = []
+
     row_frame = Frame(kw_list_frame, bg="#FFFFFF", pady=6, padx=10, relief=SOLID, bd=1)
     row_frame.pack(fill=X, pady=3)
 
@@ -722,11 +790,10 @@ def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, 
     format_cb.pack(side=LEFT, padx=2)
 
     Label(top_frame, text="置換:", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(5,0))
-    replace_before_var = StringVar(value=replace_before)
-    Entry(top_frame, textvariable=replace_before_var, width=8).pack(side=LEFT, padx=2)
-    Label(top_frame, text="⇒", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT)
-    replace_after_var = StringVar(value=replace_after)
-    Entry(top_frame, textvariable=replace_after_var, width=8).pack(side=LEFT, padx=2)
+    replaces_var = StringVar(value=json.dumps(replaces))
+    btn_replace = Button(top_frame, text=f"⚙ 設定 ({len(replaces)})", font=("Meiryo UI", 8), bg="#E9ECEF",
+                         command=lambda: open_replace_dialog(root, replaces_var, update_sample_label, btn_replace))
+    btn_replace.pack(side=LEFT, padx=2)
 
     Label(top_frame, text="除外:", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(5,0))
     exclude_var = StringVar(value=exclude_text)
@@ -741,14 +808,19 @@ def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, 
             return
             
         res_text = sample_text
-        rep_before = replace_before_var.get()
-        rep_after = replace_after_var.get()
-        
-        if rep_before:
-            try:
-                res_text = re.sub(rep_before, rep_after, res_text)
-            except re.error:
-                res_text = res_text.replace(rep_before, rep_after)
+        try:
+            reps = json.loads(replaces_var.get())
+        except:
+            reps = []
+            
+        for rep in reps:
+            rep_before = rep.get("before", "")
+            rep_after = rep.get("after", "")
+            if rep_before:
+                try:
+                    res_text = re.sub(rep_before, rep_after, res_text)
+                except re.error:
+                    res_text = res_text.replace(rep_before, rep_after)
                 
         excludes = [x.strip() for x in exclude_var.get().split(",") if x.strip()]
         for ex in excludes:
@@ -759,8 +831,7 @@ def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, 
                 
         sample_label.config(text=f"【元】{sample_text} ⇒ 【後】{res_text}")
         
-    replace_before_var.trace_add("write", update_sample_label)
-    replace_after_var.trace_add("write", update_sample_label)
+    replaces_var.trace_add("write", update_sample_label)
     exclude_var.trace_add("write", update_sample_label)
     update_sample_label()
 
@@ -800,7 +871,7 @@ def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, 
     row_data = {
         "col_var": col_var, "format_var": format_var, "xmin_var": xmin_var, "xmax_var": xmax_var,
         "ymin_var": ymin_var, "ymax_var": ymax_var, "exclude_var": exclude_var, "frame": row_frame, "sample_text": sample_text,
-        "replace_before_var": replace_before_var, "replace_after_var": replace_after_var
+        "replaces_var": replaces_var
     }
     keyword_entries.append(row_data)
     keyword_ui_frames.append(row_frame)

@@ -5,6 +5,7 @@
 import os
 import math
 import re
+import json
 from tkinter import *
 from tkinter import messagebox
 from tkinter import ttk
@@ -99,13 +100,10 @@ class PreviewDialog(Toplevel):
         self.format_var.trace_add("write", lambda *args: self.update_preview_text())
         
         Label(options_bar, text="置換:", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
-        self.replace_before_var = StringVar(value="")
-        self.replace_before_var.trace_add("write", lambda *args: self.update_preview_text())
-        Entry(options_bar, textvariable=self.replace_before_var, width=10).pack(side=LEFT, padx=(2, 2))
-        Label(options_bar, text="⇒", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
-        self.replace_after_var = StringVar(value="")
-        self.replace_after_var.trace_add("write", lambda *args: self.update_preview_text())
-        Entry(options_bar, textvariable=self.replace_after_var, width=10).pack(side=LEFT, padx=(2, 15))
+        self.replaces_var = StringVar(value="[]")
+        self.replaces_var.trace_add("write", lambda *args: self.update_preview_text())
+        self.btn_replace = Button(options_bar, text="⚙ 設定 (0)", font=("Meiryo UI", 8), bg="#E9ECEF", command=self.open_replace_dialog)
+        self.btn_replace.pack(side=LEFT, padx=(2, 15))
 
         Label(options_bar, text="除外文字(カンマ区切/正規表現可):", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
         self.exclude_var = StringVar(value="")
@@ -143,6 +141,52 @@ class PreviewDialog(Toplevel):
         self.canvas.bind("<Shift-MouseWheel>", self.on_shift_mousewheel)
         self.canvas.bind("<Control-MouseWheel>", self.on_ctrl_mousewheel)
         
+    def open_replace_dialog(self):
+        dlg = Toplevel(self)
+        dlg.title("詳細置換設定 (最大10件)")
+        dlg.geometry("320x400")
+        dlg.grab_set()
+        dlg.resizable(False, False)
+        
+        Label(dlg, text="置換前 ⇒ 置換後（上から順に適用されます）", font=("Meiryo UI", 9)).pack(pady=(10, 5))
+        
+        try:
+            current_replaces = json.loads(self.replaces_var.get())
+        except:
+            current_replaces = []
+            
+        entries = []
+        frame = Frame(dlg)
+        frame.pack(fill=BOTH, expand=True, padx=10)
+        
+        for i in range(10):
+            row_f = Frame(frame)
+            row_f.pack(fill=X, pady=2)
+            Label(row_f, text=f"{i+1}:", font=("Meiryo UI", 9), width=3).pack(side=LEFT)
+            v_b = StringVar()
+            v_a = StringVar()
+            if i < len(current_replaces):
+                v_b.set(current_replaces[i].get("before", ""))
+                v_a.set(current_replaces[i].get("after", ""))
+                
+            Entry(row_f, textvariable=v_b, width=12).pack(side=LEFT, padx=2)
+            Label(row_f, text="⇒", font=("Meiryo UI", 9)).pack(side=LEFT)
+            Entry(row_f, textvariable=v_a, width=12).pack(side=LEFT, padx=2)
+            entries.append((v_b, v_a))
+            
+        def save():
+            new_replaces = []
+            for v_b, v_a in entries:
+                b = v_b.get()
+                a = v_a.get()
+                if b:
+                    new_replaces.append({"before": b, "after": a})
+            self.replaces_var.set(json.dumps(new_replaces))
+            self.btn_replace.config(text=f"⚙ 設定 ({len(new_replaces)})")
+            dlg.destroy()
+            
+        Button(dlg, text="保存して閉じる", command=save, bg="#0D6EFD", fg="white", font=("Meiryo UI", 9, "bold")).pack(pady=10)
+
     def update_radio_colors(self, *args):
         mode = self.mode.get()
         if mode == "anchor":
@@ -260,13 +304,18 @@ class PreviewDialog(Toplevel):
             ext_text = self.get_extracted_text()
             if ext_text:
                 # 置換文字のリアルタイム適用
-                rep_before = self.replace_before_var.get()
-                rep_after = self.replace_after_var.get()
-                if rep_before:
-                    try:
-                        ext_text = re.sub(rep_before, rep_after, ext_text)
-                    except re.error:
-                        ext_text = ext_text.replace(rep_before, rep_after)
+                try:
+                    reps = json.loads(self.replaces_var.get())
+                except:
+                    reps = []
+                for rep in reps:
+                    rep_before = rep.get("before", "")
+                    rep_after = rep.get("after", "")
+                    if rep_before:
+                        try:
+                            ext_text = re.sub(rep_before, rep_after, ext_text)
+                        except re.error:
+                            ext_text = ext_text.replace(rep_before, rep_after)
                         
                 # 除外文字のリアルタイム適用
                 excludes = [x.strip() for x in self.exclude_var.get().split(",") if x.strip()]
@@ -465,18 +514,20 @@ class PreviewDialog(Toplevel):
         base_dist = self.get_base_dist()
         format_type = self.format_var.get()
         exclude_text = self.exclude_var.get()
-        replace_before = self.replace_before_var.get()
-        replace_after = self.replace_after_var.get()
+        try:
+            replaces = json.loads(self.replaces_var.get())
+        except:
+            replaces = []
         col_name = "" 
         
-        self.on_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replace_before, replace_after)
+        self.on_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replaces)
         
         self.rect_dxf_start = None
         self.rect_dxf_end = None
         self.mode.set("rect")
         self.exclude_var.set("") # 連続追加のためクリア
-        self.replace_before_var.set("")
-        self.replace_after_var.set("")
+        self.replaces_var.set("[]")
+        self.btn_replace.config(text="⚙ 設定 (0)")
         
         self.draw(update_text=False)
         self.preview_text_var.set(f"✅ 抽出項目を追加しました！続けて次の抽出範囲をドラッグしてください。")
@@ -502,11 +553,13 @@ class PreviewDialog(Toplevel):
             base_dist = self.get_base_dist()
             format_type = self.format_var.get()
             exclude_text = self.exclude_var.get()
-            replace_before = self.replace_before_var.get()
-            replace_after = self.replace_after_var.get()
+            try:
+                replaces = json.loads(self.replaces_var.get())
+            except:
+                replaces = []
             col_name = "" 
             
-            self.on_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replace_before, replace_after)
+            self.on_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replaces)
             
         self.destroy()
 
