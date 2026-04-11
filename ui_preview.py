@@ -62,7 +62,6 @@ class PreviewDialog(Toplevel):
         self.rect_dxf_start = None
         self.rect_dxf_end = None
         self.is_dragging = False
-        self.exclude_var = StringVar(value="")
         
         self.setup_ui()
         self.init_transform()
@@ -89,15 +88,36 @@ class PreviewDialog(Toplevel):
         Button(btn_frame, text="完了して閉じる", command=self.finish_and_close, bg="#6C757D", fg="white", font=("Meiryo UI", 10, "bold"), padx=10).pack(side=LEFT, padx=5)
         Button(btn_frame, text="中止", command=self.cancel_and_close, bg="#DC3545", fg="white", font=("Meiryo UI", 10, "bold"), padx=10).pack(side=LEFT, padx=5)
         
+        # オプション設定バーを追加
+        options_bar = Frame(self, bg="#F8F9FA", pady=5, padx=15, relief=SOLID, bd=1)
+        options_bar.pack(fill=X, pady=(0, 5))
+        
+        Label(options_bar, text="表示形式:", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
+        self.format_var = StringVar(value="標準")
+        format_cb = ttk.Combobox(options_bar, textvariable=self.format_var, values=["標準", "数値", "通貨", "会計", "日付", "時刻", "パーセンテージ", "分数", "指数", "文字列"], width=8, state="readonly")
+        format_cb.pack(side=LEFT, padx=(2, 15))
+        self.format_var.trace_add("write", lambda *args: self.update_preview_text())
+        
+        Label(options_bar, text="置換:", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
+        self.replace_before_var = StringVar(value="")
+        self.replace_before_var.trace_add("write", lambda *args: self.update_preview_text())
+        Entry(options_bar, textvariable=self.replace_before_var, width=10).pack(side=LEFT, padx=(2, 2))
+        Label(options_bar, text="⇒", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
+        self.replace_after_var = StringVar(value="")
+        self.replace_after_var.trace_add("write", lambda *args: self.update_preview_text())
+        Entry(options_bar, textvariable=self.replace_after_var, width=10).pack(side=LEFT, padx=(2, 15))
+
+        Label(options_bar, text="除外文字(カンマ区切/正規表現可):", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
+        self.exclude_var = StringVar(value="")
+        self.exclude_var.trace_add("write", lambda *args: self.update_preview_text())
+        Entry(options_bar, textvariable=self.exclude_var, width=15).pack(side=LEFT, padx=2)
+        
         preview_bar = Frame(self, bg="#D1E7DD", pady=8, padx=15)
         preview_bar.pack(fill=X)
-        self.preview_label = Label(preview_bar, text="", font=("Meiryo UI", 12, "bold"), bg="#D1E7DD", fg="#0F5132")
-        self.preview_label.pack(side=LEFT)
-        
-        # 除外文字入力欄の追加
-        Label(preview_bar, text="除外文字(カンマ区切/正規表現可):", font=("Meiryo UI", 9), bg="#D1E7DD", fg="#0F5132").pack(side=LEFT, padx=(20, 5))
-        self.exclude_var.trace_add("write", lambda *args: self.update_preview_text())
-        Entry(preview_bar, textvariable=self.exclude_var, width=20).pack(side=LEFT)
+        self.preview_text_var = StringVar()
+        self.preview_entry = Entry(preview_bar, textvariable=self.preview_text_var, font=("Meiryo UI", 12, "bold"), bg="#D1E7DD", fg="#0F5132", readonlybackground="#D1E7DD", relief=FLAT)
+        self.preview_entry.pack(side=LEFT, fill=X, expand=True)
+        self.preview_entry.config(state='readonly')
         
         self.update_preview_text()
         
@@ -225,20 +245,29 @@ class PreviewDialog(Toplevel):
         
         if matched_texts:
             matched_texts.sort(key=lambda item: (-item['y'], item['x']))
-            return "".join([t['text'] for t in matched_texts])
+            return "/".join([t['text'] for t in matched_texts])
         return ""
 
     def update_preview_text(self):
         if not self.anchor:
-            self.preview_label.config(text="【抽出プレビュー】 1. 図面内の「第1基準文字」をクリックしてください")
+            self.preview_text_var.set("【抽出プレビュー】 1. 図面内の「第1基準文字」をクリックしてください")
         elif self.mode.get() == "anchor2":
-            self.preview_label.config(text=f"【第1基準: {self.anchor['text']}】 2. スケール・回転補正用の「第2基準文字」をクリックしてください（不要なら次へ）")
+            self.preview_text_var.set(f"【第1基準: {self.anchor['text']}】 2. スケール・回転補正用の「第2基準文字」をクリックしてください（不要なら次へ）")
         elif not self.rect_dxf_start or not self.rect_dxf_end:
             kw2_txt = f" / 第2: {self.anchor2['text']}" if self.anchor2 else ""
-            self.preview_label.config(text=f"【基準設定済: {self.anchor['text']}{kw2_txt}】 3. 抽出したい値の範囲を左ドラッグで囲んでください")
+            self.preview_text_var.set(f"【基準設定済: {self.anchor['text']}{kw2_txt}】 3. 抽出したい値の範囲を左ドラッグで囲んでください")
         else:
             ext_text = self.get_extracted_text()
             if ext_text:
+                # 置換文字のリアルタイム適用
+                rep_before = self.replace_before_var.get()
+                rep_after = self.replace_after_var.get()
+                if rep_before:
+                    try:
+                        ext_text = re.sub(rep_before, rep_after, ext_text)
+                    except re.error:
+                        ext_text = ext_text.replace(rep_before, rep_after)
+                        
                 # 除外文字のリアルタイム適用
                 excludes = [x.strip() for x in self.exclude_var.get().split(",") if x.strip()]
                 for ex in excludes:
@@ -246,9 +275,10 @@ class PreviewDialog(Toplevel):
                         ext_text = re.sub(ex, "", ext_text)
                     except re.error:
                         ext_text = ext_text.replace(ex, "")
-                self.preview_label.config(text=f"【抽出テスト】 {ext_text}")
+                        
+                self.preview_text_var.set(f"【抽出テスト ({self.format_var.get()})】 {ext_text}")
             else:
-                self.preview_label.config(text=f"【抽出テスト】 (※選択範囲内にテキストが見つかりません)")
+                self.preview_text_var.set(f"【抽出テスト】 (※選択範囲内にテキストが見つかりません)")
 
     def draw(self, update_text=True):
         self.canvas.delete("all")
@@ -433,18 +463,23 @@ class PreviewDialog(Toplevel):
         kw_text = self.anchor["text"]
         kw2_text = self.anchor2["text"] if self.anchor2 else ""
         base_dist = self.get_base_dist()
+        format_type = self.format_var.get()
         exclude_text = self.exclude_var.get()
+        replace_before = self.replace_before_var.get()
+        replace_after = self.replace_after_var.get()
         col_name = "" 
         
-        self.on_complete(kw_text, kw2_text, base_dist, col_name, xmin, xmax, ymin, ymax, ext_text, exclude_text)
+        self.on_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replace_before, replace_after)
         
         self.rect_dxf_start = None
         self.rect_dxf_end = None
         self.mode.set("rect")
         self.exclude_var.set("") # 連続追加のためクリア
+        self.replace_before_var.set("")
+        self.replace_after_var.set("")
         
         self.draw(update_text=False)
-        self.preview_label.config(text=f"✅ 抽出項目を追加しました！続けて次の抽出範囲をドラッグしてください。")
+        self.preview_text_var.set(f"✅ 抽出項目を追加しました！続けて次の抽出範囲をドラッグしてください。")
 
     def finish_and_close(self):
         if self.anchor and self.rect_dxf_start and self.rect_dxf_end:
@@ -465,10 +500,13 @@ class PreviewDialog(Toplevel):
             kw_text = self.anchor["text"]
             kw2_text = self.anchor2["text"] if self.anchor2 else ""
             base_dist = self.get_base_dist()
+            format_type = self.format_var.get()
             exclude_text = self.exclude_var.get()
+            replace_before = self.replace_before_var.get()
+            replace_after = self.replace_after_var.get()
             col_name = "" 
             
-            self.on_complete(kw_text, kw2_text, base_dist, col_name, xmin, xmax, ymin, ymax, ext_text, exclude_text)
+            self.on_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replace_before, replace_after)
             
         self.destroy()
 

@@ -134,6 +134,8 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                         x_min, x_max = cfg["xmin"], cfg["xmax"]
                         y_min, y_max = cfg["ymin"], cfg["ymax"]
                         excludes = [x.strip() for x in cfg.get("exclude", "").split(",") if x.strip()]
+                        replace_before = cfg.get("replace_before", "")
+                        replace_after = cfg.get("replace_after", "")
                             
                         matched_texts = []
                         for t in texts:
@@ -155,7 +157,15 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                         
                         if matched_texts:
                             matched_texts.sort(key=lambda item: (-item['y'], item['x']))
-                            found_val = "".join([t['text'] for t in matched_texts])
+                            found_val = "/".join([t['text'] for t in matched_texts])
+                            
+                            # 置換処理
+                            if replace_before:
+                                try:
+                                    found_val = re.sub(replace_before, replace_after, found_val)
+                                except re.error:
+                                    found_val = found_val.replace(replace_before, replace_after)
+                                    
                             # 除外文字の削除処理 (正規表現対応)
                             for ex in excludes:
                                 try:

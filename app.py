@@ -146,7 +146,9 @@ def _get_current_settings_dict():
             "ymin": row["ymin_var"].get(),
             "ymax": row["ymax_var"].get(),
             "sample": row.get("sample_text", ""),
-            "exclude": row["exclude_var"].get()
+            "exclude": row["exclude_var"].get(),
+            "replace_before": row["replace_before_var"].get(),
+            "replace_after": row["replace_after_var"].get()
         })
 
     geom = root.geometry()
@@ -248,7 +250,9 @@ def _apply_settings_dict(settings, apply_env=False):
                 ymin=kw_data.get("ymin", 0.0),
                 ymax=kw_data.get("ymax", 0.0),
                 sample_text=kw_data.get("sample", ""),
-                exclude_text=kw_data.get("exclude", "")
+                exclude_text=kw_data.get("exclude", ""),
+                replace_before=kw_data.get("replace_before", ""),
+                replace_after=kw_data.get("replace_after", "")
             )
     
     root.update_idletasks()
@@ -361,13 +365,13 @@ def open_preview():
         messagebox.showwarning("警告", "対象内にDXFファイルが見つかりません。")
         return
         
-    def on_preview_complete(kw_text, kw2_text, base_dist, col_name, xmin, xmax, ymin, ymax, ext_text, exclude_text):
+    def on_preview_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replace_before, replace_after):
         base_kw_var.set(kw_text)
         base_kw2_var.set(kw2_text)
         base_dist_var.set(base_dist)
         if not col_name:
             col_name = f"抽出列{len(keyword_entries) + 1}"
-        add_keyword_row(col_name, "標準", xmin, xmax, ymin, ymax, ext_text, exclude_text)
+        add_keyword_row(col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replace_before, replace_after)
 
     PreviewDialog(root, target_dxf, on_preview_complete, base_kw_var.get(), base_kw2_var.get())
 
@@ -401,6 +405,8 @@ def extract_dxf_text():
             
         col_name = cfg["col_var"].get().strip()
         exclude_str = cfg["exclude_var"].get().strip()
+        replace_before_str = cfg["replace_before_var"].get()
+        replace_after_str = cfg["replace_after_var"].get()
         if not col_name:
             col_name = f"列{keyword_entries.index(cfg)+1}"
             
@@ -409,7 +415,9 @@ def extract_dxf_text():
             "format": cfg["format_var"].get(),
             "xmin": xmin, "xmax": xmax,
             "ymin": ymin, "ymax": ymax,
-            "exclude": exclude_str
+            "exclude": exclude_str,
+            "replace_before": replace_before_str,
+            "replace_after": replace_after_str
         })
 
     prog_win = ProgressWindow(root, "DXFテキスト抽出")
@@ -697,7 +705,7 @@ kw_list_frame.pack(fill=X, pady=5)
 keyword_entries = []     # 内部データ用
 keyword_ui_frames = []   # UI削除用
 
-def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text="", exclude_text=""):
+def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text="", exclude_text="", replace_before="", replace_after=""):
     row_frame = Frame(kw_list_frame, bg="#FFFFFF", pady=6, padx=10, relief=SOLID, bd=1)
     row_frame.pack(fill=X, pady=3)
 
@@ -706,33 +714,53 @@ def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, 
     
     Label(top_frame, text="出力列名:", font=("Meiryo UI", 8, "bold"), bg="#FFFFFF", fg="#495057").pack(side=LEFT)
     col_var = StringVar(value=col)
-    Entry(top_frame, textvariable=col_var, width=15).pack(side=LEFT, padx=5)
+    Entry(top_frame, textvariable=col_var, width=12).pack(side=LEFT, padx=2)
 
     Label(top_frame, text="表示形式:", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(5,0))
     format_var = StringVar(value=format_type)
     format_cb = ttk.Combobox(top_frame, textvariable=format_var, values=["標準", "数値", "通貨", "会計", "日付", "時刻", "パーセンテージ", "分数", "指数", "文字列"], width=8, state="readonly")
     format_cb.pack(side=LEFT, padx=2)
 
-    Label(top_frame, text="除外文字:", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(10,0))
+    Label(top_frame, text="置換:", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(5,0))
+    replace_before_var = StringVar(value=replace_before)
+    Entry(top_frame, textvariable=replace_before_var, width=8).pack(side=LEFT, padx=2)
+    Label(top_frame, text="⇒", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT)
+    replace_after_var = StringVar(value=replace_after)
+    Entry(top_frame, textvariable=replace_after_var, width=8).pack(side=LEFT, padx=2)
+
+    Label(top_frame, text="除外:", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(5,0))
     exclude_var = StringVar(value=exclude_text)
-    Entry(top_frame, textvariable=exclude_var, width=15).pack(side=LEFT, padx=2)
+    Entry(top_frame, textvariable=exclude_var, width=10).pack(side=LEFT, padx=2)
 
     sample_label = Label(top_frame, text="", font=("Meiryo UI", 8, "bold"), bg="#FFFFFF", fg="#198754")
     if sample_text:
-        sample_label.pack(side=LEFT, padx=10)
+        sample_label.pack(side=LEFT, padx=5)
 
     def update_sample_label(*args):
         if not sample_text:
             return
-        excludes = [x.strip() for x in exclude_var.get().split(",") if x.strip()]
+            
         res_text = sample_text
+        rep_before = replace_before_var.get()
+        rep_after = replace_after_var.get()
+        
+        if rep_before:
+            try:
+                res_text = re.sub(rep_before, rep_after, res_text)
+            except re.error:
+                res_text = res_text.replace(rep_before, rep_after)
+                
+        excludes = [x.strip() for x in exclude_var.get().split(",") if x.strip()]
         for ex in excludes:
             try:
                 res_text = re.sub(ex, "", res_text)
             except re.error:
                 res_text = res_text.replace(ex, "")
+                
         sample_label.config(text=f"【元】{sample_text} ⇒ 【後】{res_text}")
         
+    replace_before_var.trace_add("write", update_sample_label)
+    replace_after_var.trace_add("write", update_sample_label)
     exclude_var.trace_add("write", update_sample_label)
     update_sample_label()
 
@@ -771,7 +799,8 @@ def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, 
 
     row_data = {
         "col_var": col_var, "format_var": format_var, "xmin_var": xmin_var, "xmax_var": xmax_var,
-        "ymin_var": ymin_var, "ymax_var": ymax_var, "exclude_var": exclude_var, "frame": row_frame, "sample_text": sample_text
+        "ymin_var": ymin_var, "ymax_var": ymax_var, "exclude_var": exclude_var, "frame": row_frame, "sample_text": sample_text,
+        "replace_before_var": replace_before_var, "replace_after_var": replace_after_var
     }
     keyword_entries.append(row_data)
     keyword_ui_frames.append(row_frame)
