@@ -8,27 +8,32 @@ import time
 import traceback
 import re
 import openpyxl
-from tkinter import messagebox
 from dxf_core import get_all_elements_from_dxf, apply_text_inheritance
 
-def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_kw_str, base_kw2_str, base_dist, keyword_settings):
+def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_kw_str, base_kw2_str, base_dist, keyword_settings, progress_callback=None, cancel_check=None):
     try:
         processed_count = 0
         error_logs = []
+        total_files = len(target_files)
 
         if is_keyword_mode:
             if not base_kw_str:
-                messagebox.showwarning("警告", "第1基準文字が設定されていません。")
-                return
+                return False, "第1基準文字が設定されていません。"
             if not keyword_settings:
-                messagebox.showwarning("警告", "抽出設定（抽出範囲）がありません。「＋ プレビューを開いて基準文字と抽出範囲を設定」から設定を行ってください。")
-                return
+                return False, "抽出設定（抽出範囲）がありません。「＋ プレビューを開いて基準文字と抽出範囲を設定」から設定を行ってください。"
 
             header = ["元ファイル名"]
             for cfg in keyword_settings:
                 header.append(cfg["col_name"])
 
-            for file_path in target_files:
+            for i, file_path in enumerate(target_files):
+                # 中止チェック
+                if cancel_check and cancel_check():
+                    return False, "ユーザーにより処理が中止されました。"
+
+                if progress_callback:
+                    progress_callback(i, total_files, f"抽出中 ({i+1}/{total_files}): {os.path.basename(file_path)}")
+                
                 out_wb = openpyxl.Workbook()
                 ws = out_wb.active
                 ws.title = "プレビュー抽出結果"
@@ -163,15 +168,25 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                 except Exception as e:
                     error_logs.append(f"【{os.path.basename(file_path)}】保存エラー: {e}")
             
+            if progress_callback:
+                progress_callback(total_files, total_files, "完了しました")
+                
             msg = f"{processed_count} 個のファイルから抽出を完了しました。\n保存先: {save_dir}"
             if error_logs: msg += "\n\n※一部エラーあり:\n" + "\n".join(error_logs[:5])
-            messagebox.showinfo("完了", msg)
+            return True, msg
 
         else:
             # ---------------------------------------------------------
             # モードB: 全体抽出モード
             # ---------------------------------------------------------
-            for file_path in target_files:
+            for i, file_path in enumerate(target_files):
+                # 中止チェック
+                if cancel_check and cancel_check():
+                    return False, "ユーザーにより処理が中止されました。"
+
+                if progress_callback:
+                    progress_callback(i, total_files, f"全体抽出中 ({i+1}/{total_files}): {os.path.basename(file_path)}")
+                    
                 texts, _ = get_all_elements_from_dxf(file_path)
                 if not texts:
                     error_logs.append(f"【{os.path.basename(file_path)}】読込エラー。")
@@ -219,25 +234,37 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                 output_path = os.path.join(save_dir, f"{os.path.splitext(os.path.basename(file_path))[0]}_テキスト抽出.xlsx")
                 try: wb.save(output_path)
                 except PermissionError:
-                    messagebox.showerror("保存エラー", f"Excelが開かれています。\nパス: {output_path}")
-                    return
-                except: return
+                    return False, f"Excelが開かれています。\nパス: {output_path}"
+                except Exception as e:
+                    return False, f"エラー: {e}"
                 processed_count += 1
 
+            if progress_callback:
+                progress_callback(total_files, total_files, "完了しました")
+                
             msg = f"{processed_count} 個のDXFファイルからの全体抽出が完了しました。"
             if error_logs: msg += "\n\n※一部エラーあり:\n" + "\n".join(error_logs[:5])
-            messagebox.showinfo("完了", msg)
+            return True, msg
 
     except Exception as e:
-        messagebox.showerror("抽出エラー", f"予期せぬエラーが発生しました。\n\n【詳細】\n{traceback.format_exc()}")
+        return False, f"予期せぬエラーが発生しました。\n\n【詳細】\n{traceback.format_exc()}"
 
-def run_aggregate_data(target_files, save_dir):
+
+def run_aggregate_data(target_files, save_dir, progress_callback=None, cancel_check=None):
     try:
         agg_header = ["元ファイル名"]
         agg_rows, error_logs = [], []
+        total_files = len(target_files)
 
-        for f in target_files:
+        for i, f in enumerate(target_files):
+            # 中止チェック
+            if cancel_check and cancel_check():
+                return False, "ユーザーにより処理が中止されました。"
+
             fname = os.path.basename(f)
+            if progress_callback:
+                progress_callback(i, total_files, f"データ集約中 ({i+1}/{total_files}): {fname}")
+                
             try:
                 wb = openpyxl.load_workbook(f, data_only=True)
                 sheet = wb.worksheets[0]
@@ -249,28 +276,30 @@ def run_aggregate_data(target_files, save_dir):
                 if not valid_rows: continue
 
                 curr_header, curr_data = valid_rows[0], valid_rows[1:]
-                safe_header = [str(h).strip() if h is not None and str(h).strip() else f"列{i+1}" for i, h in enumerate(curr_header)]
+                safe_header = [str(h).strip() if h is not None and str(h).strip() else f"列{idx+1}" for idx, h in enumerate(curr_header)]
                 col_mapping = {}
 
-                for i, h in enumerate(safe_header):
+                for idx, h in enumerate(safe_header):
                     if h not in agg_header: agg_header.append(h)
-                    col_mapping[i] = agg_header.index(h)
+                    col_mapping[idx] = agg_header.index(h)
 
                 for r in curr_data:
                     row = [""] * len(agg_header)
                     row[0] = fname
-                    for i, val in enumerate(r):
-                        if i in col_mapping:
-                            idx = col_mapping[i]
-                            if idx >= len(row): row.extend([""] * (idx - len(row) + 1))
-                            row[idx] = "" if val is None or str(val).strip() == "None" else str(val).strip()
+                    for idx, val in enumerate(r):
+                        if idx in col_mapping:
+                            mapped_idx = col_mapping[idx]
+                            if mapped_idx >= len(row): row.extend([""] * (mapped_idx - len(row) + 1))
+                            row[mapped_idx] = "" if val is None or str(val).strip() == "None" else str(val).strip()
                     agg_rows.append(row)
             except Exception as e:
                 error_logs.append(f"【{fname}】スキップ: {e}")
 
         if not agg_rows:
-            messagebox.showinfo("結果", "集約できるデータがありませんでした。")
-            return
+            return False, "集約できるデータがありませんでした。"
+
+        if progress_callback:
+            progress_callback(total_files, total_files, "最終書き出し処理中...")
 
         out_wb = openpyxl.Workbook()
         ws = out_wb.active
@@ -296,15 +325,13 @@ def run_aggregate_data(target_files, save_dir):
         
         try: out_wb.save(output_path)
         except PermissionError:
-            messagebox.showerror("保存エラー", f"Excelファイルが開かれているため保存できません。\nパス: {output_path}")
-            return
+            return False, f"Excelファイルが開かれているため保存できません。\nパス: {output_path}"
         except Exception as e:
-            messagebox.showerror("保存エラー", f"エラー: {e}")
-            return
+            return False, f"エラー: {e}"
 
         msg = f"{len(target_files)}個のファイルデータを集約しました。\n保存先: {output_path}"
         if error_logs: msg += f"\n\n※一部スキップ:\n" + "\n".join(error_logs[:3])
-        messagebox.showinfo("完了", msg)
+        return True, msg
 
     except Exception as e:
-        messagebox.showerror("集約エラー", f"エラーが発生しました。\n\n【詳細】\n{traceback.format_exc()}")
+        return False, f"エラーが発生しました。\n\n【詳細】\n{traceback.format_exc()}"
