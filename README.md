@@ -1,4 +1,4 @@
-DxfExtractionMiya v1.0.0
+DxfExtractionMiya v1.1.0
 
 アプリの概要
 
@@ -23,9 +23,9 @@ OS: Windows 10 / Windows 11
 
 インストールと起動方法
 
-配布された DxfExtractionMiya-v1.0.0.exe をPC内の任意のわかりやすい場所（デスクトップや専用フォルダなど）に保存します（インストール作業は不要です）。
+配布された DxfExtractionMiya-v1.1.0.exe をPC内の任意のわかりやすい場所（デスクトップや専用フォルダなど）に保存します（インストール作業は不要です）。
 
-DxfExtractionMiya-v1.0.0.exe をダブルクリックして起動します。
+DxfExtractionMiya-v1.1.0.exe をダブルクリックして起動します。
 
 ⚠️ 【重要】初回起動時の注意点について
 インターネットからダウンロードしたアプリを初めて実行した際、青い画面で 「Windows によって PC が保護されました」 という警告（SmartScreen）が表示される場合があります。

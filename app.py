@@ -23,7 +23,7 @@ from app_logic import run_extract_dxf
 # 共通変数
 # ==========================
 APP_TITLE = "DxfExtractionMiya"
-VERSION = "v1.0.0"
+VERSION = "v1.1.0"
 
 selected_files = []
 selected_folder = ""
