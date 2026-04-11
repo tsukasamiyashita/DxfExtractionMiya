@@ -183,9 +183,9 @@ class PreviewDialog(Toplevel):
             t_clean = t['text'].strip()
             if t_clean == self.anchor['text'].strip() or (self.anchor2 and t_clean == self.anchor2['text'].strip()): continue
             
-            # 文字幅による横方向のズレを防ぐため、Xは挿入点のまま。Yのみ高さを考慮して少し上に設定
+            # アライメントによる横ズレを防ぐためXは挿入点のまま、Yのみ文字の高さの中央付近を代表点とする
             rep_x = t['x']
-            rep_y = t['y'] + (t.get('h', 2.5) * 0.4)
+            rep_y = t['y'] + (t.get('h', 2.5) * 0.5)
             
             tx, ty = self._transform_point(rep_x, rep_y)
             if xmin <= tx <= xmax and ymin <= ty <= ymax:

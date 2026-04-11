@@ -107,9 +107,9 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                             t_clean_str = t['text'].strip()
                             if t_clean_str == found_anchor1['text'].strip() or (found_anchor2 and t_clean_str == found_anchor2['text'].strip()): continue
                             
-                            # 文字の左端・中央付近を判定用の代表点とする
+                            # アライメントによる横ズレを防ぐためXは挿入点のまま、Yのみ文字の高さの中央付近を代表点とする
                             rep_x = t['x']
-                            rep_y = t['y'] + (t.get('h', 2.5) * 0.4)
+                            rep_y = t['y'] + (t.get('h', 2.5) * 0.5)
                             
                             px, py = rep_x - ax, rep_y - ay
                             nx = (px * cos_t - py * sin_t) / L
