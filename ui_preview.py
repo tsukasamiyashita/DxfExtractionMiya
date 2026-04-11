@@ -9,7 +9,7 @@ import json
 from tkinter import *
 from tkinter import messagebox
 from tkinter import ttk
-from dxf_core import get_all_elements_from_dxf
+from dxf_core import get_all_elements_from_dxf, zen_to_han_alnum
 
 class PreviewDialog(Toplevel):
     def __init__(self, parent, dxf_path, on_complete, current_base_kw, current_base_kw2):
@@ -38,7 +38,7 @@ class PreviewDialog(Toplevel):
         self.anchor2 = None
         
         if current_base_kw:
-            kw_c = current_base_kw.replace(" ", "").replace("　", "").lower()
+            kw_c = zen_to_han_alnum(current_base_kw).replace(" ", "").replace("　", "").lower()
             for t in self.texts:
                 tc = t['text'].replace(" ", "").replace("　", "").lower()
                 if tc == kw_c:
@@ -46,7 +46,7 @@ class PreviewDialog(Toplevel):
                     break
                     
         if current_base_kw2:
-            kw2_c = current_base_kw2.replace(" ", "").replace("　", "").lower()
+            kw2_c = zen_to_han_alnum(current_base_kw2).replace(" ", "").replace("　", "").lower()
             for t in self.texts:
                 tc = t['text'].replace(" ", "").replace("　", "").lower()
                 if tc == kw2_c:

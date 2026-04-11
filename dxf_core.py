@@ -6,12 +6,19 @@ import re
 import ezdxf
 from ezdxf import recover
 
+def zen_to_han_alnum(text):
+    if not isinstance(text, str): return text
+    zen = "０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
+    han = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    return text.translate(str.maketrans(zen, han))
+
 def sanitize_text(text):
     if text is None: return ""
     text_str = str(text)
     illegal_chars = re.compile(r'[\000-\010]|[\013-\014]|[\016-\037]')
     # 制御文字の削除のみ行い、スペースは保持する（前後の空白のみ削除）
-    return illegal_chars.sub('', text_str).strip()
+    cleaned = illegal_chars.sub('', text_str).strip()
+    return zen_to_han_alnum(cleaned)
 
 def get_point(pt):
     try:
