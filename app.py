@@ -582,9 +582,15 @@ base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 icon_path = os.path.abspath(os.path.join(base_path, "icon.ico"))
 if os.path.exists(icon_path):
     try:
-        root.iconbitmap(default=icon_path)
+        # iconbitmapの代わりにiconphotoを使用（Windowsでより確実に反映される）
+        icon = PhotoImage(file=icon_path)
+        root.iconphoto(True, icon)
     except Exception:
-        pass
+        # PhotoImageがicoを直接読めない古いTcl/Tkの環境に備えたフォールバック
+        try:
+            root.iconbitmap(default=icon_path)
+        except Exception:
+            pass
 # --------------------------------------------------
 
 root.title(f"{APP_TITLE} {VERSION}")
