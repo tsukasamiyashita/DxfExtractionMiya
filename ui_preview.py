@@ -62,6 +62,8 @@ class PreviewDialog(Toplevel):
             
         self.rect_dxf_start = None
         self.rect_dxf_end = None
+        self.zoom_dxf_start = None
+        self.zoom_dxf_end = None
         self.is_dragging = False
         
         self.setup_ui()
@@ -74,14 +76,20 @@ class PreviewDialog(Toplevel):
         toolbar.pack(fill=X)
         
         Label(toolbar, text="手順: ", font=("Meiryo UI", 10, "bold"), bg="#E9ECEF").pack(side=LEFT)
-        self.rb1 = Radiobutton(toolbar, text="1. 第1基準文字を選択", variable=self.mode, value="anchor", indicatoron=0, bg="#F8D7DA", selectcolor="#DC3545", padx=10, pady=5)
-        self.rb1.pack(side=LEFT, padx=5)
-        self.rb2 = Radiobutton(toolbar, text="2. 第2基準文字を選択(任意)", variable=self.mode, value="anchor2", indicatoron=0, bg="#FFE5D0", selectcolor="#FD7E14", padx=10, pady=5)
-        self.rb2.pack(side=LEFT, padx=5)
-        self.rb3 = Radiobutton(toolbar, text="3. 抽出範囲をドラッグ", variable=self.mode, value="rect", indicatoron=0, bg="#CFE2FF", selectcolor="#0D6EFD", padx=10, pady=5)
-        self.rb3.pack(side=LEFT, padx=5)
+        self.rb1 = Radiobutton(toolbar, text="1. 第1基準", variable=self.mode, value="anchor", indicatoron=0, bg="#F8D7DA", selectcolor="#DC3545", padx=8, pady=5)
+        self.rb1.pack(side=LEFT, padx=2)
+        self.rb2 = Radiobutton(toolbar, text="2. 第2基準(任意)", variable=self.mode, value="anchor2", indicatoron=0, bg="#FFE5D0", selectcolor="#FD7E14", padx=8, pady=5)
+        self.rb2.pack(side=LEFT, padx=2)
+        self.rb3 = Radiobutton(toolbar, text="3. 抽出範囲", variable=self.mode, value="rect", indicatoron=0, bg="#CFE2FF", selectcolor="#0D6EFD", padx=8, pady=5)
+        self.rb3.pack(side=LEFT, padx=2)
         
-        Label(toolbar, text="※ ホイール:ズーム  |  右ドラッグ:移動  |  Shift+ホイール:横スクロール  |  Ctrl+ホイール:縦スクロール", fg="#6C757D", bg="#E9ECEF").pack(side=LEFT, padx=20)
+        Label(toolbar, text=" | ", bg="#E9ECEF", fg="#ADB5BD").pack(side=LEFT, padx=2)
+        
+        self.rb_zoom = Radiobutton(toolbar, text="🔍 範囲拡大", variable=self.mode, value="zoom_rect", indicatoron=0, bg="#E2E3E5", selectcolor="#6C757D", padx=8, pady=5)
+        self.rb_zoom.pack(side=LEFT, padx=2)
+        Button(toolbar, text="🏠 全体表示に戻す", command=self.reset_zoom, bg="#E2E3E5", fg="black", padx=8, pady=3).pack(side=LEFT, padx=2)
+        
+        Label(toolbar, text="※ ホイール:ズーム | 右ドラッグ:移動", fg="#6C757D", bg="#E9ECEF", font=("Meiryo UI", 8)).pack(side=LEFT, padx=(10, 0))
         
         btn_frame = Frame(toolbar, bg="#E9ECEF")
         btn_frame.pack(side=RIGHT, padx=5)
@@ -101,6 +109,8 @@ class PreviewDialog(Toplevel):
         self.format_var = StringVar(value="標準")
         format_cb = ttk.Combobox(options_bar, textvariable=self.format_var, values=["標準", "数値", "通貨", "会計", "日付", "時刻", "パーセンテージ", "分数", "指数", "文字列"], width=8, state="readonly")
         format_cb.pack(side=LEFT, padx=(2, 15))
+        format_cb.bind("<FocusOut>", lambda e: format_cb.selection_clear())
+        format_cb.bind("<<ComboboxSelected>>", lambda e: self.canvas.focus_set())
         self.format_var.trace_add("write", lambda *args: self.update_preview_text())
         
         Label(options_bar, text="置換:", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
@@ -207,6 +217,11 @@ class PreviewDialog(Toplevel):
             self.rb3.config(fg="white")
         else:
             self.rb3.config(fg="black")
+            
+        if mode == "zoom_rect":
+            self.rb_zoom.config(fg="white")
+        else:
+            self.rb_zoom.config(fg="black")
 
     def init_transform(self):
         xs, ys = [], []
@@ -400,6 +415,7 @@ class PreviewDialog(Toplevel):
             self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#0D6EFD", dash=(4, 4), width=2, fill="#CFE2FF", stipple="gray25", tags="selection_rect")
             
     def on_left_press(self, event):
+        self.canvas.focus_set()
         cx = self.canvas.canvasx(event.x)
         cy = self.canvas.canvasy(event.y)
         dx, dy = self.c2d(cx, cy)
@@ -427,6 +443,11 @@ class PreviewDialog(Toplevel):
             self.rect_dxf_end = (dx, dy)
             self.is_dragging = True
             self.draw_rect()
+        elif self.mode.get() == "zoom_rect":
+            self.zoom_dxf_start = (dx, dy)
+            self.zoom_dxf_end = (dx, dy)
+            self.is_dragging = True
+            self.draw_zoom_rect()
             
     def on_left_drag(self, event):
         if self.mode.get() == "rect" and self.is_dragging:
@@ -435,13 +456,23 @@ class PreviewDialog(Toplevel):
             dx, dy = self.c2d(cx, cy)
             self.rect_dxf_end = (dx, dy)
             self.draw_rect()
+        elif self.mode.get() == "zoom_rect" and self.is_dragging:
+            cx = self.canvas.canvasx(event.x)
+            cy = self.canvas.canvasy(event.y)
+            dx, dy = self.c2d(cx, cy)
+            self.zoom_dxf_end = (dx, dy)
+            self.draw_zoom_rect()
             
     def on_left_release(self, event):
         if self.mode.get() == "rect" and self.is_dragging:
             self.is_dragging = False
             self.update_preview_text()
+        elif self.mode.get() == "zoom_rect" and self.is_dragging:
+            self.is_dragging = False
+            self.apply_zoom_rect()
             
     def on_right_press(self, event):
+        self.canvas.focus_set()
         self.canvas.scan_mark(event.x, event.y)
         
     def on_right_drag(self, event):
@@ -532,6 +563,7 @@ class PreviewDialog(Toplevel):
         self.exclude_var.set("") # 連続追加のためクリア
         self.replaces_var.set("[]")
         self.col_name_var.set("")
+        self.format_var.set("標準")
         self.btn_replace.config(text="⚙ 設定 (0)")
         
         self.draw(update_text=False)
@@ -570,3 +602,69 @@ class PreviewDialog(Toplevel):
 
     def cancel_and_close(self):
         self.destroy()
+
+    def draw_zoom_rect(self):
+        self.canvas.delete("zoom_rect")
+        if self.zoom_dxf_start and self.zoom_dxf_end:
+            cx1, cy1 = self.d2c(*self.zoom_dxf_start)
+            cx2, cy2 = self.d2c(*self.zoom_dxf_end)
+            self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#6C757D", dash=(4, 4), width=2, fill="#E2E3E5", stipple="gray25", tags="zoom_rect")
+
+    def apply_zoom_rect(self):
+        if not self.zoom_dxf_start or not self.zoom_dxf_end: return
+        dx1, dy1 = self.zoom_dxf_start
+        dx2, dy2 = self.zoom_dxf_end
+        
+        dw = abs(dx2 - dx1)
+        dh = abs(dy2 - dy1)
+        if dw < 1e-5 or dh < 1e-5:
+            self.canvas.delete("zoom_rect")
+            return
+            
+        cw = self.canvas.winfo_width()
+        ch = self.canvas.winfo_height()
+        if cw <= 1 or ch <= 1:
+            cw, ch = 800, 600
+            
+        new_scale = min((cw - 100) / dw, (ch - 100) / dh)
+        self.scale = new_scale
+        
+        self.draw(update_text=False)
+        self.canvas.update_idletasks()
+        
+        target_cx, target_cy = self.d2c(min(dx1, dx2), max(dy1, dy2))
+        
+        sr_val = self.canvas.cget("scrollregion")
+        if sr_val:
+            sr_x, sr_y, sr_x2, sr_y2 = [float(v) for v in sr_val.split()]
+            sr_w = sr_x2 - sr_x
+            sr_h = sr_y2 - sr_y
+            
+            fx = (target_cx - 50 - sr_x) / sr_w if sr_w > 0 else 0
+            fy = (target_cy - 50 - sr_y) / sr_h if sr_h > 0 else 0
+            
+            self.canvas.xview_moveto(fx)
+            self.canvas.yview_moveto(fy)
+            
+        self.zoom_dxf_start = None
+        self.zoom_dxf_end = None
+        self.mode.set("rect")
+
+    def reset_zoom(self):
+        self.scale = self.base_scale
+        self.draw(update_text=False)
+        self.canvas.update_idletasks()
+        
+        sr_val = self.canvas.cget("scrollregion")
+        if sr_val:
+            sr_x, sr_y, sr_x2, sr_y2 = [float(v) for v in sr_val.split()]
+            sr_w = sr_x2 - sr_x
+            sr_h = sr_y2 - sr_y
+            cw = self.canvas.winfo_width()
+            ch = self.canvas.winfo_height()
+            
+            fx = ((sr_w - cw) / 2) / sr_w if sr_w > cw else 0
+            fy = ((sr_h - ch) / 2) / sr_h if sr_h > ch else 0
+            
+            self.canvas.xview_moveto(fx)
+            self.canvas.yview_moveto(fy)
