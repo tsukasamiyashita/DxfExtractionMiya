@@ -6,11 +6,12 @@ import os
 import math
 import time
 import traceback
+import re
 import openpyxl
 from tkinter import messagebox
 from dxf_core import get_all_elements_from_dxf, apply_text_inheritance
 
-def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_kw_str, base_kw2_str, keyword_settings):
+def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_kw_str, base_kw2_str, base_dist, keyword_settings):
     try:
         processed_count = 0
         error_logs = []
@@ -23,23 +24,24 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                 messagebox.showwarning("警告", "抽出設定（抽出範囲）がありません。「＋ プレビューを開いて基準文字と抽出範囲を設定」から設定を行ってください。")
                 return
 
-            out_wb = openpyxl.Workbook()
-            ws = out_wb.active
-            ws.title = "プレビュー抽出結果"
-            
-            ws_coord = out_wb.create_sheet(title="座標リスト(設定確認用)")
-            ws_coord.append(["元ファイル名", "テキスト", "X座標", "Y座標"])
-            ws_coord.column_dimensions['A'].width = 25
-            ws_coord.column_dimensions['B'].width = 40
-            ws_coord.column_dimensions['C'].width = 15
-            ws_coord.column_dimensions['D'].width = 15
-            
             header = ["元ファイル名"]
             for cfg in keyword_settings:
                 header.append(cfg["col_name"])
-            ws.append(header)
 
             for file_path in target_files:
+                out_wb = openpyxl.Workbook()
+                ws = out_wb.active
+                ws.title = "プレビュー抽出結果"
+                
+                ws_coord = out_wb.create_sheet(title="座標リスト(設定確認用)")
+                ws_coord.append(["元ファイル名", "テキスト", "X座標", "Y座標"])
+                ws_coord.column_dimensions['A'].width = 25
+                ws_coord.column_dimensions['B'].width = 40
+                ws_coord.column_dimensions['C'].width = 15
+                ws_coord.column_dimensions['D'].width = 15
+                
+                ws.append(header)
+
                 texts, _ = get_all_elements_from_dxf(file_path)
                 if not texts:
                     error_logs.append(f"【{os.path.basename(file_path)}】テキストが見つかりません。")
@@ -76,8 +78,7 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                             a2x, a2y = kw2_entity['x'], kw2_entity['y']
                             if ax == a2x and ay == a2y: continue
                             
-                        # 抽出枠の意図しない肥大化・変形を防ぐため、回転・スケール補正を無効化
-                        # 第1基準文字からの単純な平行移動（XYの相対距離）のみとする
+                        # 回転は無効化し、第1基準文字からの平行移動のみで判定する
                         L, theta = 1.0, 0.0
                         cos_t = 1.0
                         sin_t = 0.0
@@ -91,9 +92,17 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                 if transform_params:
                     ax, ay, L, cos_t, sin_t = transform_params
                     
+                    # プレビュー時と現在の図面で「第1・第2基準間の距離」に差がある場合、スケールを補正して抽出範囲を伸縮させる
+                    if base_dist > 0 and found_anchor2:
+                        a2x, a2y = found_anchor2['x'], found_anchor2['y']
+                        target_dist = math.sqrt((a2x - ax)**2 + (a2y - ay)**2)
+                        if target_dist > 0:
+                            L = target_dist / base_dist
+                    
                     for cfg in keyword_settings:
                         x_min, x_max = cfg["xmin"], cfg["xmax"]
                         y_min, y_max = cfg["ymin"], cfg["ymax"]
+                        excludes = [x.strip() for x in cfg.get("exclude", "").split(",") if x.strip()]
                             
                         matched_texts = []
                         for t in texts:
@@ -116,6 +125,13 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                         if matched_texts:
                             matched_texts.sort(key=lambda item: (-item['y'], item['x']))
                             found_val = "".join([t['text'] for t in matched_texts])
+                            # 除外文字の削除処理 (正規表現対応)
+                            for ex in excludes:
+                                try:
+                                    found_val = re.sub(ex, "", found_val)
+                                except re.error:
+                                    # 正規表現として無効な場合は通常の置換へフォールバック
+                                    found_val = found_val.replace(ex, "")
                         else:
                             found_val = ""
                             
@@ -126,29 +142,28 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                     error_logs.append(f"【{os.path.basename(file_path)}】基準文字が見つかりません。")
                 
                 ws.append(file_row)
-                processed_count += 1
 
-            for col in ws.columns:
+                for col in ws.columns:
+                    try:
+                        max_length = 0
+                        col_letter = col[0].column_letter
+                        for cell in col:
+                            if cell.value:
+                                length = sum(2 if ord(c) > 255 else 1 for c in str(cell.value))
+                                if length > max_length: max_length = length
+                        ws.column_dimensions[col_letter].width = min(max_length + 2, 60)
+                    except: pass
+
+                output_path = os.path.join(save_dir, f"{os.path.splitext(os.path.basename(file_path))[0]}_抽出.xlsx")
                 try:
-                    max_length = 0
-                    col_letter = col[0].column_letter
-                    for cell in col:
-                        if cell.value:
-                            length = sum(2 if ord(c) > 255 else 1 for c in str(cell.value))
-                            if length > max_length: max_length = length
-                    ws.column_dimensions[col_letter].width = min(max_length + 2, 60)
-                except: pass
-
-            output_path = os.path.join(save_dir, f"DXFプレビュー抽出_{time.strftime('%Y%m%d_%H%M%S')}.xlsx")
-            try: out_wb.save(output_path)
-            except PermissionError:
-                messagebox.showerror("保存エラー", f"Excelファイルが開かれているため保存できません。\nパス: {output_path}")
-                return
-            except Exception as e:
-                messagebox.showerror("保存エラー", f"エラー: {e}")
-                return
+                    out_wb.save(output_path)
+                    processed_count += 1
+                except PermissionError:
+                    error_logs.append(f"【{os.path.basename(file_path)}】Excelファイルが開かれているため保存できません。")
+                except Exception as e:
+                    error_logs.append(f"【{os.path.basename(file_path)}】保存エラー: {e}")
             
-            msg = f"{processed_count} 個のファイルから抽出を完了しました。\n保存先: {output_path}"
+            msg = f"{processed_count} 個のファイルから抽出を完了しました。\n保存先: {save_dir}"
             if error_logs: msg += "\n\n※一部エラーあり:\n" + "\n".join(error_logs[:5])
             messagebox.showinfo("完了", msg)
 

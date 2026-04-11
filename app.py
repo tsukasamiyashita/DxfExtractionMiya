@@ -29,6 +29,7 @@ current_mode = None  # "file" or "folder"
 # UI変数のプレースホルダー（UI構築時に初期化）
 base_kw_var = None
 base_kw2_var = None
+base_dist_var = None
 
 # ==========================
 # 選択処理
@@ -94,7 +95,8 @@ def _get_current_settings_dict():
             "xmax": row["xmax_var"].get(),
             "ymin": row["ymin_var"].get(),
             "ymax": row["ymax_var"].get(),
-            "sample": row.get("sample_text", "")
+            "sample": row.get("sample_text", ""),
+            "exclude": row["exclude_var"].get()
         })
 
     geom = root.geometry()
@@ -123,6 +125,7 @@ def _get_current_settings_dict():
         "threshold": threshold_var.get(),
         "base_kw": base_kw_var.get(),
         "base_kw2": base_kw2_var.get(),
+        "base_dist": base_dist_var.get(),
         "keywords": kw_list
     }
 
@@ -176,6 +179,9 @@ def _apply_settings_dict(settings, apply_env=False):
         base_kw2_var.set(settings["base_kw2"])
     elif "keywords" in settings and len(settings["keywords"]) > 0 and "kw2" in settings["keywords"][0]:
         base_kw2_var.set(settings["keywords"][0].get("kw2", ""))
+
+    if "base_dist" in settings:
+        base_dist_var.set(settings["base_dist"])
         
     if "keywords" in settings:
         for row in list(keyword_ui_frames):
@@ -190,7 +196,8 @@ def _apply_settings_dict(settings, apply_env=False):
                 xmax=kw_data.get("xmax", 0.0),
                 ymin=kw_data.get("ymin", 0.0),
                 ymax=kw_data.get("ymax", 0.0),
-                sample_text=kw_data.get("sample", "")
+                sample_text=kw_data.get("sample", ""),
+                exclude_text=kw_data.get("exclude", "")
             )
     
     root.update_idletasks()
@@ -303,12 +310,13 @@ def open_preview():
         messagebox.showwarning("警告", "対象内にDXFファイルが見つかりません。")
         return
         
-    def on_preview_complete(kw_text, kw2_text, col_name, xmin, xmax, ymin, ymax, ext_text):
+    def on_preview_complete(kw_text, kw2_text, base_dist, col_name, xmin, xmax, ymin, ymax, ext_text, exclude_text):
         base_kw_var.set(kw_text)
         base_kw2_var.set(kw2_text)
+        base_dist_var.set(base_dist)
         if not col_name:
             col_name = f"抽出列{len(keyword_entries) + 1}"
-        add_keyword_row(col_name, xmin, xmax, ymin, ymax, ext_text)
+        add_keyword_row(col_name, xmin, xmax, ymin, ymax, ext_text, exclude_text)
 
     PreviewDialog(root, target_dxf, on_preview_complete, base_kw_var.get(), base_kw2_var.get())
 
@@ -330,6 +338,7 @@ def extract_dxf_text():
     y_threshold = threshold_var.get()
     base_kw_str = base_kw_var.get().replace(" ", "").replace("　", "").lower()
     base_kw2_str = base_kw2_var.get().replace(" ", "").replace("　", "").lower()
+    base_dist = base_dist_var.get()
     
     keyword_settings = []
     for cfg in keyword_entries:
@@ -340,16 +349,18 @@ def extract_dxf_text():
             xmin, xmax, ymin, ymax = 0.0, 0.0, 0.0, 0.0
             
         col_name = cfg["col_var"].get().strip()
+        exclude_str = cfg["exclude_var"].get().strip()
         if not col_name:
             col_name = f"列{keyword_entries.index(cfg)+1}"
             
         keyword_settings.append({
             "col_name": col_name,
             "xmin": xmin, "xmax": xmax,
-            "ymin": ymin, "ymax": ymax
+            "ymin": ymin, "ymax": ymax,
+            "exclude": exclude_str
         })
 
-    run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_kw_str, base_kw2_str, keyword_settings)
+    run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_kw_str, base_kw2_str, base_dist, keyword_settings)
 
 def aggregate_data():
     target_files = []
@@ -383,6 +394,7 @@ style.theme_use("clam")
 # UI変数の初期化
 base_kw_var = StringVar()
 base_kw2_var = StringVar()
+base_dist_var = DoubleVar(value=0.0)
 
 header_frame = Frame(root, bg="#0D6EFD", pady=15)
 header_frame.pack(fill=X)
@@ -401,7 +413,13 @@ canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas.find_withtag("all"
 canvas.configure(yscrollcommand=scrollbar.set)
 canvas.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
-root.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+
+def on_main_mousewheel(e):
+    # e.widgetのトップレベルウィンドウがメインウィンドウ(root)の場合のみスクロールさせる
+    if e.widget.winfo_toplevel() == root:
+        canvas.yview_scroll(int(-1*(e.delta/120)), "units")
+
+root.bind_all("<MouseWheel>", on_main_mousewheel)
 
 main_frame = scrollable_frame
 
@@ -477,6 +495,7 @@ Entry(bk_inner, textvariable=base_kw2_var, width=15).pack(side=LEFT, padx=5)
 def clear_base_keywords():
     base_kw_var.set("")
     base_kw2_var.set("")
+    base_dist_var.set(0.0)
 
 Button(bk_inner, text="クリア", command=clear_base_keywords, bg="#6C757D", fg="white", font=("Meiryo UI", 8), padx=5).pack(side=LEFT, padx=(10, 0))
 
@@ -506,7 +525,7 @@ kw_list_frame.pack(fill=X, pady=5)
 keyword_entries = []     # 内部データ用
 keyword_ui_frames = []   # UI削除用
 
-def add_keyword_row(col="", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text=""):
+def add_keyword_row(col="", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text="", exclude_text=""):
     row_frame = Frame(kw_list_frame, bg="#FFFFFF", pady=6, padx=10, relief=SOLID, bd=1)
     row_frame.pack(fill=X, pady=3)
 
@@ -517,8 +536,28 @@ def add_keyword_row(col="", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text=
     col_var = StringVar(value=col)
     Entry(top_frame, textvariable=col_var, width=15).pack(side=LEFT, padx=5)
 
+    Label(top_frame, text="除外文字(カンマ区切):", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(10,0))
+    exclude_var = StringVar(value=exclude_text)
+    Entry(top_frame, textvariable=exclude_var, width=20).pack(side=LEFT, padx=5)
+
+    sample_label = Label(top_frame, text="", font=("Meiryo UI", 8, "bold"), bg="#FFFFFF", fg="#198754")
     if sample_text:
-        Label(top_frame, text=f"⇒ {sample_text}", font=("Meiryo UI", 8, "bold"), bg="#FFFFFF", fg="#198754").pack(side=LEFT, padx=15)
+        sample_label.pack(side=LEFT, padx=10)
+
+    def update_sample_label(*args):
+        if not sample_text:
+            return
+        excludes = [x.strip() for x in exclude_var.get().split(",") if x.strip()]
+        res_text = sample_text
+        for ex in excludes:
+            try:
+                res_text = re.sub(ex, "", res_text)
+            except re.error:
+                res_text = res_text.replace(ex, "")
+        sample_label.config(text=f"【元】{sample_text} ⇒ 【後】{res_text}")
+        
+    exclude_var.trace_add("write", update_sample_label)
+    update_sample_label()
 
     bottom_frame = Frame(row_frame, bg="#FFFFFF")
     bottom_frame.pack(fill=X)
@@ -555,7 +594,7 @@ def add_keyword_row(col="", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text=
 
     row_data = {
         "col_var": col_var, "xmin_var": xmin_var, "xmax_var": xmax_var,
-        "ymin_var": ymin_var, "ymax_var": ymax_var, "frame": row_frame, "sample_text": sample_text
+        "ymin_var": ymin_var, "ymax_var": ymax_var, "exclude_var": exclude_var, "frame": row_frame, "sample_text": sample_text
     }
     keyword_entries.append(row_data)
     keyword_ui_frames.append(row_frame)

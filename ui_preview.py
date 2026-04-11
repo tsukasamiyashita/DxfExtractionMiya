@@ -4,8 +4,10 @@
 """
 import os
 import math
+import re
 from tkinter import *
 from tkinter import messagebox
+from tkinter import ttk
 from dxf_core import get_all_elements_from_dxf
 
 class PreviewDialog(Toplevel):
@@ -26,9 +28,9 @@ class PreviewDialog(Toplevel):
         
         self.scale = 1.0
         self.base_scale = 1.0
-        self.offset_x = 0.0
-        self.offset_y = 0.0
         self.min_x = 0.0
+        self.max_x = 0.0
+        self.min_y = 0.0
         self.max_y = 0.0
         
         self.anchor = None
@@ -55,43 +57,62 @@ class PreviewDialog(Toplevel):
         else:
             self.mode = StringVar(value="anchor")
             
+        self.mode.trace_add("write", self.update_radio_colors)
+            
         self.rect_dxf_start = None
         self.rect_dxf_end = None
         self.is_dragging = False
-        self.pan_start_x = 0
-        self.pan_start_y = 0
+        self.exclude_var = StringVar(value="")
         
         self.setup_ui()
         self.init_transform()
         self.draw()
+        self.update_radio_colors()
         
     def setup_ui(self):
         toolbar = Frame(self, bg="#E9ECEF", pady=10, padx=10)
         toolbar.pack(fill=X)
         
         Label(toolbar, text="手順: ", font=("Meiryo UI", 10, "bold"), bg="#E9ECEF").pack(side=LEFT)
-        self.rb1 = Radiobutton(toolbar, text="1. 第1基準文字を選択", variable=self.mode, value="anchor", indicatoron=0, bg="#FFF3CD", selectcolor="#FFC107", padx=10, pady=5)
+        self.rb1 = Radiobutton(toolbar, text="1. 第1基準文字を選択", variable=self.mode, value="anchor", indicatoron=0, bg="#F8D7DA", selectcolor="#DC3545", padx=10, pady=5)
         self.rb1.pack(side=LEFT, padx=5)
-        self.rb2 = Radiobutton(toolbar, text="2. 第2基準文字を選択(任意)", variable=self.mode, value="anchor2", indicatoron=0, bg="#CFF4FC", selectcolor="#0DCAF0", padx=10, pady=5)
+        self.rb2 = Radiobutton(toolbar, text="2. 第2基準文字を選択(任意)", variable=self.mode, value="anchor2", indicatoron=0, bg="#FFE5D0", selectcolor="#FD7E14", padx=10, pady=5)
         self.rb2.pack(side=LEFT, padx=5)
-        self.rb3 = Radiobutton(toolbar, text="3. 抽出範囲をドラッグ", variable=self.mode, value="rect", indicatoron=0, bg="#D1E7DD", selectcolor="#198754", padx=10, pady=5)
+        self.rb3 = Radiobutton(toolbar, text="3. 抽出範囲をドラッグ", variable=self.mode, value="rect", indicatoron=0, bg="#CFE2FF", selectcolor="#0D6EFD", padx=10, pady=5)
         self.rb3.pack(side=LEFT, padx=5)
         
-        Label(toolbar, text="※ ホイール:ズーム  |  右ドラッグ:移動", fg="#6C757D", bg="#E9ECEF").pack(side=LEFT, padx=20)
+        Label(toolbar, text="※ ホイール:ズーム  |  右ドラッグ:移動  |  Shift+ホイール:横スクロール  |  Ctrl+ホイール:縦スクロール", fg="#6C757D", bg="#E9ECEF").pack(side=LEFT, padx=20)
         
         btn_frame = Frame(toolbar, bg="#E9ECEF")
         btn_frame.pack(side=RIGHT, padx=5)
         Button(btn_frame, text="＋ 設定を追加して次へ", command=self.confirm, bg="#0D6EFD", fg="white", font=("Meiryo UI", 10, "bold"), padx=10).pack(side=LEFT, padx=5)
         Button(btn_frame, text="完了して閉じる", command=self.finish_and_close, bg="#6C757D", fg="white", font=("Meiryo UI", 10, "bold"), padx=10).pack(side=LEFT, padx=5)
+        Button(btn_frame, text="中止", command=self.cancel_and_close, bg="#DC3545", fg="white", font=("Meiryo UI", 10, "bold"), padx=10).pack(side=LEFT, padx=5)
         
         preview_bar = Frame(self, bg="#D1E7DD", pady=8, padx=15)
         preview_bar.pack(fill=X)
         self.preview_label = Label(preview_bar, text="", font=("Meiryo UI", 12, "bold"), bg="#D1E7DD", fg="#0F5132")
         self.preview_label.pack(side=LEFT)
+        
+        # 除外文字入力欄の追加
+        Label(preview_bar, text="除外文字(カンマ区切/正規表現可):", font=("Meiryo UI", 9), bg="#D1E7DD", fg="#0F5132").pack(side=LEFT, padx=(20, 5))
+        self.exclude_var.trace_add("write", lambda *args: self.update_preview_text())
+        Entry(preview_bar, textvariable=self.exclude_var, width=20).pack(side=LEFT)
+        
         self.update_preview_text()
         
-        self.canvas = Canvas(self, bg="white", cursor="crosshair")
-        self.canvas.pack(fill=BOTH, expand=True)
+        canvas_frame = Frame(self, bg="white")
+        canvas_frame.pack(fill=BOTH, expand=True)
+
+        self.canvas = Canvas(canvas_frame, bg="white", cursor="crosshair")
+        
+        self.vbar = ttk.Scrollbar(canvas_frame, orient=VERTICAL, command=self.canvas.yview)
+        self.hbar = ttk.Scrollbar(canvas_frame, orient=HORIZONTAL, command=self.canvas.xview)
+        self.canvas.configure(yscrollcommand=self.vbar.set, xscrollcommand=self.hbar.set)
+
+        self.vbar.pack(side=RIGHT, fill=Y)
+        self.hbar.pack(side=BOTTOM, fill=X)
+        self.canvas.pack(side=LEFT, fill=BOTH, expand=True)
         
         self.canvas.bind("<ButtonPress-1>", self.on_left_press)
         self.canvas.bind("<B1-Motion>", self.on_left_drag)
@@ -99,7 +120,26 @@ class PreviewDialog(Toplevel):
         self.canvas.bind("<ButtonPress-3>", self.on_right_press)
         self.canvas.bind("<B3-Motion>", self.on_right_drag)
         self.canvas.bind("<MouseWheel>", self.on_mousewheel)
+        self.canvas.bind("<Shift-MouseWheel>", self.on_shift_mousewheel)
+        self.canvas.bind("<Control-MouseWheel>", self.on_ctrl_mousewheel)
         
+    def update_radio_colors(self, *args):
+        mode = self.mode.get()
+        if mode == "anchor":
+            self.rb1.config(fg="white")
+        else:
+            self.rb1.config(fg="black")
+            
+        if mode == "anchor2":
+            self.rb2.config(fg="white")
+        else:
+            self.rb2.config(fg="black")
+            
+        if mode == "rect":
+            self.rb3.config(fg="white")
+        else:
+            self.rb3.config(fg="black")
+
     def init_transform(self):
         xs, ys = [], []
         for t in self.texts:
@@ -121,34 +161,37 @@ class PreviewDialog(Toplevel):
             messagebox.showwarning("警告", "描画可能なテキストや図形が見つかりませんでした。", parent=self)
             return
 
-        self.min_x, max_x = min(xs), max(xs)
-        min_y, self.max_y = min(ys), max(ys)
+        self.min_x, self.max_x = min(xs), max(xs)
+        self.min_y, self.max_y = min(ys), max(ys)
         
-        w = max_x - self.min_x
-        h = self.max_y - min_y
+        w = self.max_x - self.min_x
+        h = self.max_y - self.min_y
         if w == 0: w = 1
         if h == 0: h = 1
         
         self.base_scale = min(900 / w, 700 / h) * 0.9
         self.scale = self.base_scale
-        self.offset_x = 50
-        self.offset_y = 50
         
     def d2c(self, x, y):
-        cx = (x - self.min_x) * self.scale + self.offset_x
-        cy = (self.max_y - y) * self.scale + self.offset_y
+        cx = (x - self.min_x) * self.scale + 50
+        cy = (self.max_y - y) * self.scale + 50
         return cx, cy
         
     def c2d(self, cx, cy):
-        x = (cx - self.offset_x) / self.scale + self.min_x
-        y = self.max_y - (cy - self.offset_y) / self.scale
+        x = (cx - 50) / self.scale + self.min_x
+        y = self.max_y - (cy - 50) / self.scale
         return x, y
         
     def _transform_point(self, px, py):
         ax, ay = self.anchor["x"], self.anchor["y"]
-        # 抽出枠の意図しない肥大化を防ぐため、回転・スケール補正を無効化
-        # 第1基準文字からの単純な平行移動のみで相対座標を計算する
         return px - ax, py - ay
+
+    def get_base_dist(self):
+        if self.anchor and self.anchor2:
+            dx = self.anchor2["x"] - self.anchor["x"]
+            dy = self.anchor2["y"] - self.anchor["y"]
+            return math.sqrt(dx**2 + dy**2)
+        return 0.0
 
     def get_extracted_text(self):
         if not self.anchor or not self.rect_dxf_start or not self.rect_dxf_end:
@@ -173,7 +216,6 @@ class PreviewDialog(Toplevel):
             t_clean = t['text'].strip()
             if t_clean == self.anchor['text'].strip() or (self.anchor2 and t_clean == self.anchor2['text'].strip()): continue
             
-            # アライメントによる横ズレを防ぐためXは挿入点のまま、Yのみ文字の高さの中央付近を代表点とする
             rep_x = t['x']
             rep_y = t['y'] + (t.get('h', 2.5) * 0.5)
             
@@ -197,15 +239,19 @@ class PreviewDialog(Toplevel):
         else:
             ext_text = self.get_extracted_text()
             if ext_text:
+                # 除外文字のリアルタイム適用
+                excludes = [x.strip() for x in self.exclude_var.get().split(",") if x.strip()]
+                for ex in excludes:
+                    try:
+                        ext_text = re.sub(ex, "", ext_text)
+                    except re.error:
+                        ext_text = ext_text.replace(ex, "")
                 self.preview_label.config(text=f"【抽出テスト】 {ext_text}")
             else:
                 self.preview_label.config(text=f"【抽出テスト】 (※選択範囲内にテキストが見つかりません)")
 
     def draw(self, update_text=True):
         self.canvas.delete("all")
-        cw = max(10, self.canvas.winfo_width())
-        ch = max(10, self.canvas.winfo_height())
-        margin = 100
         shape_color = "#C0C0C0"
         
         for s in self.shapes:
@@ -213,28 +259,21 @@ class PreviewDialog(Toplevel):
                 if s['type'] == 'line':
                     cx1, cy1 = self.d2c(*s['start'])
                     cx2, cy2 = self.d2c(*s['end'])
-                    if max(cx1, cx2) < -margin or min(cx1, cx2) > cw + margin or max(cy1, cy2) < -margin or min(cy1, cy2) > ch + margin:
-                        continue
                     self.canvas.create_line(cx1, cy1, cx2, cy2, fill=shape_color)
                 elif s['type'] == 'polyline':
                     pts = s['points']
                     if not pts: continue
                     c_pts = [self.d2c(*pt) for pt in pts]
                     if s.get('closed') and len(c_pts) > 2: c_pts.append(c_pts[0])
-                    
-                    cxs = [pt[0] for pt in c_pts]; cys = [pt[1] for pt in c_pts]
-                    if max(cxs) < -margin or min(cxs) > cw + margin or max(cys) < -margin or min(cys) > ch + margin: continue
                     flat_pts = [coord for pt in c_pts for coord in pt]
                     self.canvas.create_line(flat_pts, fill=shape_color)
                 elif s['type'] == 'circle':
                     cx, cy = self.d2c(*s['center'])
                     cr = s['radius'] * self.scale
-                    if cx + cr < -margin or cx - cr > cw + margin or cy + cr < -margin or cy - cr > ch + margin: continue
                     self.canvas.create_oval(cx - cr, cy - cr, cx + cr, cy + cr, outline=shape_color)
                 elif s['type'] == 'arc':
                     cx, cy = self.d2c(*s['center'])
                     cr = s['radius'] * self.scale
-                    if cx + cr < -margin or cx - cr > cw + margin or cy + cr < -margin or cy - cr > ch + margin: continue
                     tk_extent = s['end_angle'] - s['start_angle']
                     if tk_extent < 0: tk_extent += 360
                     tk_start = 360 - s['end_angle']
@@ -243,33 +282,45 @@ class PreviewDialog(Toplevel):
 
         for t in self.texts:
             cx, cy = self.d2c(t["x"], t["y"])
-            if cx < -margin or cx > cw + margin or cy < -margin or cy > ch + margin: continue
-                
             color = "black"
             px_height = int(t.get("h", 2.5) * self.scale)
             f_size = max(2, px_height)
             
             if self.anchor and self.anchor == t:
-                color = "red"
+                color = "#DC3545"
                 f_size = int(f_size * 1.5)
-                self.canvas.create_oval(cx-5, cy-5, cx+5, cy+5, fill="red", outline="red")
+                self.canvas.create_oval(cx-5, cy-5, cx+5, cy+5, fill="#DC3545", outline="#DC3545")
             elif self.anchor2 and self.anchor2 == t:
-                color = "#FF8C00"
+                color = "#FD7E14"
                 f_size = int(f_size * 1.5)
-                self.canvas.create_oval(cx-5, cy-5, cx+5, cy+5, fill="#FF8C00", outline="#FF8C00")
+                self.canvas.create_oval(cx-5, cy-5, cx+5, cy+5, fill="#FD7E14", outline="#FD7E14")
                 
             self.canvas.create_text(cx, cy, text=t["text"], anchor="sw", fill=color, font=("Meiryo UI", -f_size))
             
+        self.draw_rect()
+        
+        # 固定領域によるスクロール領域設定（図形の有無によらず一定空間を確保）
+        cx1, cy1 = self.d2c(self.min_x, self.max_y)
+        cx2, cy2 = self.d2c(self.max_x, self.min_y)
+        margin = 200
+        sr = (min(cx1, cx2) - margin, min(cy1, cy2) - margin, max(cx1, cx2) + margin, max(cy1, cy2) + margin)
+        self.canvas.configure(scrollregion=sr)
+        
+        if update_text:
+            self.update_preview_text()
+
+    def draw_rect(self):
+        self.canvas.delete("selection_rect")
         if self.rect_dxf_start and self.rect_dxf_end:
             cx1, cy1 = self.d2c(*self.rect_dxf_start)
             cx2, cy2 = self.d2c(*self.rect_dxf_end)
-            self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="blue", dash=(4, 4), width=2, fill="#e6f2ff", stipple="gray25")
-            
-        if update_text:
-            self.update_preview_text()
+            self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#0D6EFD", dash=(4, 4), width=2, fill="#CFE2FF", stipple="gray25", tags="selection_rect")
             
     def on_left_press(self, event):
-        dx, dy = self.c2d(event.x, event.y)
+        cx = self.canvas.canvasx(event.x)
+        cy = self.canvas.canvasy(event.y)
+        dx, dy = self.c2d(cx, cy)
+        
         if self.mode.get() in ("anchor", "anchor2"):
             best_t, best_dist = None, float('inf')
             for t in self.texts:
@@ -292,35 +343,70 @@ class PreviewDialog(Toplevel):
             self.rect_dxf_start = (dx, dy)
             self.rect_dxf_end = (dx, dy)
             self.is_dragging = True
+            self.draw_rect()
             
     def on_left_drag(self, event):
         if self.mode.get() == "rect" and self.is_dragging:
-            dx, dy = self.c2d(event.x, event.y)
+            cx = self.canvas.canvasx(event.x)
+            cy = self.canvas.canvasy(event.y)
+            dx, dy = self.c2d(cx, cy)
             self.rect_dxf_end = (dx, dy)
-            self.draw()
+            self.draw_rect()
             
     def on_left_release(self, event):
         if self.mode.get() == "rect" and self.is_dragging:
             self.is_dragging = False
-            self.draw()
+            self.update_preview_text()
             
     def on_right_press(self, event):
-        self.pan_start_x, self.pan_start_y = event.x, event.y
+        self.canvas.scan_mark(event.x, event.y)
         
     def on_right_drag(self, event):
-        self.offset_x += (event.x - self.pan_start_x)
-        self.offset_y += (event.y - self.pan_start_y)
-        self.pan_start_x, self.pan_start_y = event.x, event.y
-        self.draw()
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
         
     def on_mousewheel(self, event):
         zoom = 1.2 if event.delta > 0 else 0.8
-        mx, my = event.x, event.y
-        dx, dy = self.c2d(mx, my)
+        
+        # ズーム前のマウス直下のCanvas座標とDXF座標を取得
+        cx = self.canvas.canvasx(event.x)
+        cy = self.canvas.canvasy(event.y)
+        dx, dy = self.c2d(cx, cy)
+        
+        # スケールを更新して再描画
         self.scale *= zoom
-        self.offset_x = mx - (dx - self.min_x) * self.scale
-        self.offset_y = my - (self.max_y - dy) * self.scale
-        self.draw()
+        self.draw(update_text=False)
+        self.canvas.update_idletasks() # scrollregionの更新を確実に反映
+        
+        # ズーム後のマウス直下に来るべき新しいCanvas座標
+        new_cx, new_cy = self.d2c(dx, dy)
+        
+        sr_val = self.canvas.cget("scrollregion")
+        if sr_val:
+            sr_x, sr_y, sr_x2, sr_y2 = [float(v) for v in sr_val.split()]
+            sr_w = sr_x2 - sr_x
+            sr_h = sr_y2 - sr_y
+            
+            # マウスポインタ(event.x, event.y)に新しいCanvas座標が来るように
+            # ウィンドウ左上(0, 0)に来るべきCanvas座標を逆算
+            target_left = new_cx - event.x
+            target_top = new_cy - event.y
+            
+            # scrollregionに対する割合を計算してスクロールを移動
+            fx = (target_left - sr_x) / sr_w if sr_w > 0 else 0
+            fy = (target_top - sr_y) / sr_h if sr_h > 0 else 0
+            
+            self.canvas.xview_moveto(fx)
+            self.canvas.yview_moveto(fy)
+            
+        return "break"
+        
+    def on_shift_mousewheel(self, event):
+        self.canvas.xview_scroll(int(-1*(event.delta/120)), "units")
+        return "break"
+
+    def on_ctrl_mousewheel(self, event):
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        return "break"
         
     def confirm(self):
         if not self.anchor:
@@ -343,22 +429,24 @@ class PreviewDialog(Toplevel):
         ymax = max(p[1] for p in pts)
         
         ext_text = self.get_extracted_text()
+        
         kw_text = self.anchor["text"]
         kw2_text = self.anchor2["text"] if self.anchor2 else ""
-        col_name = "" # 空文字を渡すと、親ウィンドウ側で自動採番される
+        base_dist = self.get_base_dist()
+        exclude_text = self.exclude_var.get()
+        col_name = "" 
         
-        self.on_complete(kw_text, kw2_text, col_name, xmin, xmax, ymin, ymax, ext_text)
+        self.on_complete(kw_text, kw2_text, base_dist, col_name, xmin, xmax, ymin, ymax, ext_text, exclude_text)
         
-        # 連続設定のためにアンカーは保持し、ドラッグ範囲だけクリアする
         self.rect_dxf_start = None
         self.rect_dxf_end = None
         self.mode.set("rect")
+        self.exclude_var.set("") # 連続追加のためクリア
         
         self.draw(update_text=False)
         self.preview_label.config(text=f"✅ 抽出項目を追加しました！続けて次の抽出範囲をドラッグしてください。")
 
     def finish_and_close(self):
-        # 閉じる前に、未追加のドラッグ範囲があれば設定に追加する
         if self.anchor and self.rect_dxf_start and self.rect_dxf_end:
             x1, y1 = self.rect_dxf_start
             x2, y2 = self.rect_dxf_end
@@ -373,10 +461,16 @@ class PreviewDialog(Toplevel):
             ymax = max(p[1] for p in pts)
             
             ext_text = self.get_extracted_text()
+                
             kw_text = self.anchor["text"]
             kw2_text = self.anchor2["text"] if self.anchor2 else ""
+            base_dist = self.get_base_dist()
+            exclude_text = self.exclude_var.get()
             col_name = "" 
             
-            self.on_complete(kw_text, kw2_text, col_name, xmin, xmax, ymin, ymax, ext_text)
+            self.on_complete(kw_text, kw2_text, base_dist, col_name, xmin, xmax, ymin, ymax, ext_text, exclude_text)
             
+        self.destroy()
+
+    def cancel_and_close(self):
         self.destroy()
