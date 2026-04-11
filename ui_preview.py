@@ -92,6 +92,10 @@ class PreviewDialog(Toplevel):
         # オプション設定バーを追加
         options_bar = Frame(self, bg="#F8F9FA", pady=5, padx=15, relief=SOLID, bd=1)
         options_bar.pack(fill=X, pady=(0, 5))
+
+        Label(options_bar, text="出力列名:", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
+        self.col_name_var = StringVar(value="")
+        Entry(options_bar, textvariable=self.col_name_var, width=15).pack(side=LEFT, padx=(2, 15))
         
         Label(options_bar, text="表示形式:", font=("Meiryo UI", 9), bg="#F8F9FA").pack(side=LEFT)
         self.format_var = StringVar(value="標準")
@@ -518,7 +522,7 @@ class PreviewDialog(Toplevel):
             replaces = json.loads(self.replaces_var.get())
         except:
             replaces = []
-        col_name = "" 
+        col_name = self.col_name_var.get()
         
         self.on_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replaces)
         
@@ -527,6 +531,7 @@ class PreviewDialog(Toplevel):
         self.mode.set("rect")
         self.exclude_var.set("") # 連続追加のためクリア
         self.replaces_var.set("[]")
+        self.col_name_var.set("")
         self.btn_replace.config(text="⚙ 設定 (0)")
         
         self.draw(update_text=False)
@@ -557,7 +562,7 @@ class PreviewDialog(Toplevel):
                 replaces = json.loads(self.replaces_var.get())
             except:
                 replaces = []
-            col_name = "" 
+            col_name = self.col_name_var.get()
             
             self.on_complete(kw_text, kw2_text, base_dist, col_name, format_type, xmin, xmax, ymin, ymax, ext_text, exclude_text, replaces)
             
