@@ -146,19 +146,9 @@ class PreviewDialog(Toplevel):
         
     def _transform_point(self, px, py):
         ax, ay = self.anchor["x"], self.anchor["y"]
-        if self.anchor2:
-            a2x, a2y = self.anchor2["x"], self.anchor2["y"]
-            dx, dy = a2x - ax, a2y - ay
-            L = math.hypot(dx, dy)
-            if L < 1e-6: L, theta = 1.0, 0.0
-            else: theta = math.atan2(dy, dx)
-        else:
-            L, theta = 1.0, 0.0
-
-        vx, vy = px - ax, py - ay
-        nx = (vx * math.cos(-theta) - vy * math.sin(-theta)) / L
-        ny = (vx * math.sin(-theta) + vy * math.cos(-theta)) / L
-        return nx, ny
+        # 抽出枠の意図しない肥大化を防ぐため、回転・スケール補正を無効化
+        # 第1基準文字からの単純な平行移動のみで相対座標を計算する
+        return px - ax, py - ay
 
     def get_extracted_text(self):
         if not self.anchor or not self.rect_dxf_start or not self.rect_dxf_end:

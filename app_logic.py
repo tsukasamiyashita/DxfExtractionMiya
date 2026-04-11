@@ -76,16 +76,11 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                             a2x, a2y = kw2_entity['x'], kw2_entity['y']
                             if ax == a2x and ay == a2y: continue
                             
-                        if a2x is not None and a2y is not None:
-                            dx, dy = a2x - ax, a2y - ay
-                            L = math.hypot(dx, dy)
-                            if L < 1e-6: L, theta = 1.0, 0.0
-                            else: theta = math.atan2(dy, dx)
-                        else:
-                            L, theta = 1.0, 0.0
-                            
-                        cos_t = math.cos(-theta)
-                        sin_t = math.sin(-theta)
+                        # 抽出枠の意図しない肥大化・変形を防ぐため、回転・スケール補正を無効化
+                        # 第1基準文字からの単純な平行移動（XYの相対距離）のみとする
+                        L, theta = 1.0, 0.0
+                        cos_t = 1.0
+                        sin_t = 0.0
                         
                         transform_params = (ax, ay, L, cos_t, sin_t)
                         found_anchor1 = kw_entity
