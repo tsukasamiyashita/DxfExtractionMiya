@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 DxfExtractionMiya v1.0.0
-機能：DXFファイルからのプレビュー＆テキスト抽出（マウスで範囲指定・連続追加）、設定保存、複数Excelの集約
+機能：DXFファイルからのプレビュー＆テキスト抽出（マウスで範囲指定・連続追加）、設定保存
 メインアプリケーションモジュール
 """
 
@@ -17,7 +17,7 @@ from tkinter import filedialog, messagebox
 from tkinter import ttk
 
 from ui_preview import PreviewDialog
-from app_logic import run_extract_dxf, run_aggregate_data
+from app_logic import run_extract_dxf
 
 # ==========================
 # 共通変数
@@ -87,7 +87,7 @@ def select_files():
     global selected_files, selected_folder, current_mode
     files = filedialog.askopenfilenames(
         title="ファイルを選択",
-        filetypes=[("すべての対応ファイル", "*.dxf;*.xlsx;*.xlsm;*.xls"), ("DXFファイル", "*.dxf"), ("Excelファイル", "*.xlsx;*.xlsm;*.xls")]
+        filetypes=[("DXFファイル", "*.dxf"), ("すべてのファイル", "*.*")]
     )
     if files:
         selected_files = list(files)
@@ -117,7 +117,6 @@ def update_button_state():
     state = NORMAL if current_mode else DISABLED
     try:
         btn_extract.config(state=state)
-        btn_aggregate.config(state=state)
         
         if current_mode == "file":
             btn_file.config(bg="#0D6EFD", fg="white", font=("Meiryo UI", 9, "bold"))
@@ -472,55 +471,6 @@ def extract_dxf_text():
     thread.start()
     check_thread()
 
-def aggregate_data():
-    target_files = []
-    if current_mode == "file":
-        target_files = [f for f in selected_files if f.lower().endswith(('.xlsx', '.xlsm', '.xls'))]
-    elif current_mode == "folder" and selected_folder:
-        target_files = [os.path.join(selected_folder, f) for f in os.listdir(selected_folder) if f.lower().endswith(('.xlsx', '.xlsm', '.xls')) and "集約" not in f]
-        
-    if not target_files:
-        messagebox.showwarning("警告", "選択された対象内に集約可能なExcelファイルが見つかりません。")
-        return
-
-    save_dir = get_save_dir(target_files[0])
-    if not save_dir: return
-
-    prog_win = ProgressWindow(root, "Excelスマート集約")
-    result_queue = queue.Queue()
-
-    def callback(current, total, text):
-        root.after(0, lambda: prog_win.update_progress(current, total, text))
-
-    def task():
-        try:
-            res = run_aggregate_data(
-                target_files, save_dir, 
-                progress_callback=callback, cancel_check=prog_win.cancel_event.is_set
-            )
-            result_queue.put(("success", res))
-        except Exception as e:
-            result_queue.put(("error", traceback.format_exc()))
-
-    def check_thread():
-        if thread.is_alive():
-            root.after(100, check_thread)
-        else:
-            prog_win.destroy()
-            status, res = result_queue.get()
-            if status == "success":
-                success, msg = res
-                if success:
-                    messagebox.showinfo("完了", msg)
-                else:
-                    messagebox.showwarning("結果", msg)
-            else:
-                messagebox.showerror("集約エラー", res)
-
-    thread = threading.Thread(target=task, daemon=True)
-    thread.start()
-    check_thread()
-
 # ==========================
 # メニュー用関数群
 # ==========================
@@ -563,7 +513,7 @@ def show_readme():
 def show_version():
     messagebox.showinfo(
         "バージョン情報", 
-        f"{APP_TITLE}\nバージョン: {VERSION}\n\nDXFテキスト抽出 ＆ Excelスマート集約ツール"
+        f"{APP_TITLE}\nバージョン: {VERSION}\n\nDXFテキスト抽出 ＆ Excel自動集約ツール"
     )
 
 # ==========================
@@ -620,7 +570,7 @@ def open_replace_dialog(parent_win, replaces_var, on_update_cb, btn_widget):
 
 root = Tk()
 root.title(f"{APP_TITLE} {VERSION}")
-root.geometry("860x850")
+root.geometry("860x800")
 root.minsize(800, 600)
 root.configure(bg="#F8F9FA")
 
@@ -644,7 +594,7 @@ base_dist_var = DoubleVar(value=0.0)
 header_frame = Frame(root, bg="#0D6EFD", pady=15)
 header_frame.pack(fill=X)
 Label(header_frame, text=f"{APP_TITLE} {VERSION}", font=("Meiryo UI", 16, "bold"), bg="#0D6EFD", fg="white").pack()
-Label(header_frame, text="DXFテキスト抽出 ＆ Excelスマート集約ツール", font=("Meiryo UI", 10), bg="#0D6EFD", fg="white").pack()
+Label(header_frame, text="DXFテキスト抽出 ＆ Excel自動集約ツール", font=("Meiryo UI", 10), bg="#0D6EFD", fg="white").pack()
 
 container = Frame(root, bg="#F8F9FA")
 container.pack(fill=BOTH, expand=True)
@@ -672,9 +622,9 @@ main_frame = scrollable_frame
 Label(main_frame, text="1. 対象の選択", font=("Meiryo UI", 11, "bold"), bg="#F8F9FA").pack(anchor=W, pady=(10, 5))
 btn_frame = Frame(main_frame, bg="#F8F9FA")
 btn_frame.pack(fill=X)
-btn_file = Button(btn_frame, text="📄 ファイルを選択", command=select_files, width=20, bg="#E9ECEF", relief=GROOVE)
+btn_file = Button(btn_frame, text="📄 DXFファイルを選択", command=select_files, width=20, bg="#E9ECEF", relief=GROOVE)
 btn_file.pack(side=LEFT, padx=5, pady=5)
-btn_folder = Button(btn_frame, text="📁 フォルダを選択", command=select_folder, width=20, bg="#E9ECEF", relief=GROOVE)
+btn_folder = Button(btn_frame, text="📁 DXFフォルダを選択", command=select_folder, width=20, bg="#E9ECEF", relief=GROOVE)
 btn_folder.pack(side=LEFT, padx=5, pady=5)
 
 Label(main_frame, text="選択中のパス:", bg="#F8F9FA").pack(anchor=W, pady=(5, 0))
@@ -719,7 +669,7 @@ def toggle_mode():
             try: child.configure(state=state)
             except: pass
 
-Radiobutton(settings_frame, text="1. プレビュー画面から抽出範囲を選択して抽出（名寄せ・集約用）", variable=mode_var, value=1, bg="#FFFFFF", command=toggle_mode).pack(anchor=W, pady=(5, 0))
+Radiobutton(settings_frame, text="1. プレビュー画面から抽出範囲を選択して抽出（複数ファイル時は自動集約）", variable=mode_var, value=1, bg="#FFFFFF", command=toggle_mode).pack(anchor=W, pady=(5, 0))
 
 kw_container = Frame(settings_frame, bg="#F0F4F8", padx=10, pady=10)
 kw_container.pack(fill=X, pady=5, padx=20)
@@ -879,7 +829,7 @@ def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, 
     root.update_idletasks()
     canvas.configure(scrollregion=canvas.bbox("all"))
 
-Radiobutton(settings_frame, text="2. ファイルごとに図面内のすべてのテキストを抽出", variable=mode_var, value=2, bg="#FFFFFF", command=toggle_mode).pack(anchor=W, pady=(15, 0))
+Radiobutton(settings_frame, text="2. 図面内のすべてのテキストを抽出（複数ファイル時は自動集約）", variable=mode_var, value=2, bg="#FFFFFF", command=toggle_mode).pack(anchor=W, pady=(15, 0))
 Label(settings_frame, text="※全体抽出モード用のテキストズレ許容値（閾値）:", bg="#FFFFFF").pack(anchor=W, pady=(5, 0))
 threshold_var = DoubleVar(value=20.0)
 Spinbox(settings_frame, from_=0.0, to=500.0, increment=1.0, textvariable=threshold_var, width=10).pack(anchor=W, pady=2)
@@ -890,11 +840,8 @@ Label(main_frame, text="3. 実行", font=("Meiryo UI", 11, "bold"), bg="#F8F9FA"
 action_frame = Frame(main_frame, bg="#F8F9FA")
 action_frame.pack(fill=X)
 
-btn_extract = Button(action_frame, text="🚀 選択対象のDXFからテキストを抽出", command=extract_dxf_text, height=2, bg="#198754", fg="white", font=("Meiryo UI", 10, "bold"), state=DISABLED)
+btn_extract = Button(action_frame, text="🚀 選択対象のDXFを処理してExcelに出力", command=extract_dxf_text, height=2, bg="#198754", fg="white", font=("Meiryo UI", 10, "bold"), state=DISABLED)
 btn_extract.pack(fill=X, pady=5)
-
-btn_aggregate = Button(action_frame, text="🧩 選択対象のExcelを1つにスマート集約", command=aggregate_data, height=2, bg="#6F42C1", fg="white", font=("Meiryo UI", 10, "bold"), state=DISABLED)
-btn_aggregate.pack(fill=X, pady=5)
 
 
 if __name__ == "__main__":
