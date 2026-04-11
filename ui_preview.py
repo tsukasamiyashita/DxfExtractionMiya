@@ -3,6 +3,7 @@
 プレビュー＆範囲選択ダイアログモジュール
 """
 import os
+import sys
 import math
 import re
 import json
@@ -16,6 +17,14 @@ class PreviewDialog(Toplevel):
         super().__init__(parent)
         self.title(f"プレビュー＆範囲選択 - {os.path.basename(dxf_path)}")
         self.geometry("1200x800")
+        
+        base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+        icon_path = os.path.join(base_path, "icon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.iconbitmap(default=icon_path)
+            except Exception:
+                pass
         
         try: self.state('zoomed')
         except:
