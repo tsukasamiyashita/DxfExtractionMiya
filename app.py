@@ -12,6 +12,7 @@ import traceback
 import json
 import threading
 import queue
+import ctypes
 from tkinter import *
 from tkinter import filedialog, messagebox
 from tkinter import ttk
@@ -569,6 +570,23 @@ def open_replace_dialog(parent_win, replaces_var, on_update_cb, btn_widget):
     Button(dlg, text="保存して閉じる", command=save, bg="#0D6EFD", fg="white", font=("Meiryo UI", 9, "bold")).pack(pady=10)
 
 root = Tk()
+
+# --- ウィンドウアイコンとタスクバーアイコンの設定 ---
+try:
+    myappid = 'tsukasamiyashita.dxfextractionmiya.app.1.1'
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+except Exception:
+    pass
+
+base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+icon_path = os.path.abspath(os.path.join(base_path, "icon.ico"))
+if os.path.exists(icon_path):
+    try:
+        root.iconbitmap(default=icon_path)
+    except Exception:
+        pass
+# --------------------------------------------------
+
 root.title(f"{APP_TITLE} {VERSION}")
 root.geometry("860x800")
 root.minsize(800, 600)
