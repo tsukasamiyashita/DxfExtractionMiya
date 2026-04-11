@@ -8,7 +8,33 @@ import time
 import traceback
 import re
 import openpyxl
+from openpyxl.styles import numbers
 from dxf_core import get_all_elements_from_dxf, apply_text_inheritance
+
+def _convert_value_for_excel(val_str, format_type):
+    if not val_str:
+        return val_str
+    
+    val_str = val_str.strip()
+    if format_type == "文字列":
+        return str(val_str)
+        
+    if format_type in ["数値", "通貨", "会計", "分数", "指数"]:
+        try:
+            clean_str = val_str.replace(",", "").replace("¥", "").replace("\\", "").replace("円", "").strip()
+            if "." in clean_str: return float(clean_str)
+            return int(clean_str)
+        except ValueError:
+            return val_str
+            
+    if format_type == "パーセンテージ":
+        try:
+            clean_str = val_str.replace(",", "").replace("%", "").strip()
+            return float(clean_str) / 100.0 if "%" not in val_str else float(clean_str)
+        except ValueError:
+            return val_str
+            
+    return val_str
 
 def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_kw_str, base_kw2_str, base_dist, keyword_settings, progress_callback=None, cancel_check=None):
     try:
@@ -140,6 +166,8 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                         else:
                             found_val = ""
                             
+                        # Excelの書式設定に合わせて値を変換
+                        found_val = _convert_value_for_excel(found_val, cfg.get("format", "標準"))
                         file_row.append(found_val)
                 else:
                     for _ in keyword_settings:
@@ -147,6 +175,23 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
                     error_logs.append(f"【{os.path.basename(file_path)}】基準文字が見つかりません。")
                 
                 ws.append(file_row)
+                current_row_idx = ws.max_row
+                
+                # Excelの書式設定（表示形式）を適用
+                for col_idx, cfg in enumerate(keyword_settings):
+                    cell = ws.cell(row=current_row_idx, column=col_idx + 2)
+                    fmt = cfg.get("format", "標準")
+                    
+                    if fmt == "数値": cell.number_format = '0_ '
+                    elif fmt == "通貨": cell.number_format = '"¥"#,##0;[Red]\-"¥"#,##0'
+                    elif fmt == "会計": cell.number_format = '_ *"¥"* #,##0_ ;_ *"¥"* \-#,##0_ ;_ *"¥"* "-"_ ;_ @_ '
+                    elif fmt == "日付": cell.number_format = 'yyyy/m/d'
+                    elif fmt == "時刻": cell.number_format = 'h:mm:ss'
+                    elif fmt == "パーセンテージ": cell.number_format = '0.0%'
+                    elif fmt == "分数": cell.number_format = '# ?/?'
+                    elif fmt == "指数": cell.number_format = '0.00E+00'
+                    elif fmt == "文字列": cell.number_format = '@'
+                    else: cell.number_format = 'General'
 
                 for col in ws.columns:
                     try:

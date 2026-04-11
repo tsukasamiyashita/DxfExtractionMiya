@@ -140,6 +140,7 @@ def _get_current_settings_dict():
     for row in keyword_entries:
         kw_list.append({
             "col": row["col_var"].get(),
+            "format": row["format_var"].get(),
             "xmin": row["xmin_var"].get(),
             "xmax": row["xmax_var"].get(),
             "ymin": row["ymin_var"].get(),
@@ -241,6 +242,7 @@ def _apply_settings_dict(settings, apply_env=False):
         for kw_data in settings["keywords"]:
             add_keyword_row(
                 col=kw_data.get("col", ""),
+                format_type=kw_data.get("format", "標準"),
                 xmin=kw_data.get("xmin", 0.0),
                 xmax=kw_data.get("xmax", 0.0),
                 ymin=kw_data.get("ymin", 0.0),
@@ -365,7 +367,7 @@ def open_preview():
         base_dist_var.set(base_dist)
         if not col_name:
             col_name = f"抽出列{len(keyword_entries) + 1}"
-        add_keyword_row(col_name, xmin, xmax, ymin, ymax, ext_text, exclude_text)
+        add_keyword_row(col_name, "標準", xmin, xmax, ymin, ymax, ext_text, exclude_text)
 
     PreviewDialog(root, target_dxf, on_preview_complete, base_kw_var.get(), base_kw2_var.get())
 
@@ -404,6 +406,7 @@ def extract_dxf_text():
             
         keyword_settings.append({
             "col_name": col_name,
+            "format": cfg["format_var"].get(),
             "xmin": xmin, "xmax": xmax,
             "ymin": ymin, "ymax": ymax,
             "exclude": exclude_str
@@ -694,7 +697,7 @@ kw_list_frame.pack(fill=X, pady=5)
 keyword_entries = []     # 内部データ用
 keyword_ui_frames = []   # UI削除用
 
-def add_keyword_row(col="", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text="", exclude_text=""):
+def add_keyword_row(col="", format_type="標準", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text="", exclude_text=""):
     row_frame = Frame(kw_list_frame, bg="#FFFFFF", pady=6, padx=10, relief=SOLID, bd=1)
     row_frame.pack(fill=X, pady=3)
 
@@ -705,9 +708,14 @@ def add_keyword_row(col="", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text=
     col_var = StringVar(value=col)
     Entry(top_frame, textvariable=col_var, width=15).pack(side=LEFT, padx=5)
 
-    Label(top_frame, text="除外文字(カンマ区切):", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(10,0))
+    Label(top_frame, text="表示形式:", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(5,0))
+    format_var = StringVar(value=format_type)
+    format_cb = ttk.Combobox(top_frame, textvariable=format_var, values=["標準", "数値", "通貨", "会計", "日付", "時刻", "パーセンテージ", "分数", "指数", "文字列"], width=8, state="readonly")
+    format_cb.pack(side=LEFT, padx=2)
+
+    Label(top_frame, text="除外文字:", font=("Meiryo UI", 8), bg="#FFFFFF", fg="#495057").pack(side=LEFT, padx=(10,0))
     exclude_var = StringVar(value=exclude_text)
-    Entry(top_frame, textvariable=exclude_var, width=20).pack(side=LEFT, padx=5)
+    Entry(top_frame, textvariable=exclude_var, width=15).pack(side=LEFT, padx=2)
 
     sample_label = Label(top_frame, text="", font=("Meiryo UI", 8, "bold"), bg="#FFFFFF", fg="#198754")
     if sample_text:
@@ -762,7 +770,7 @@ def add_keyword_row(col="", xmin=0.0, xmax=0.0, ymin=0.0, ymax=0.0, sample_text=
     Button(top_frame, text="削除", command=remove_row, bg="#DC3545", fg="white", padx=10).pack(side=RIGHT, padx=5)
 
     row_data = {
-        "col_var": col_var, "xmin_var": xmin_var, "xmax_var": xmax_var,
+        "col_var": col_var, "format_var": format_var, "xmin_var": xmin_var, "xmax_var": xmax_var,
         "ymin_var": ymin_var, "ymax_var": ymax_var, "exclude_var": exclude_var, "frame": row_frame, "sample_text": sample_text
     }
     keyword_entries.append(row_data)

@@ -10,8 +10,8 @@ def sanitize_text(text):
     if text is None: return ""
     text_str = str(text)
     illegal_chars = re.compile(r'[\000-\010]|[\013-\014]|[\016-\037]')
-    # 制御文字の削除に加えて、半角・全角スペースも削除する
-    return illegal_chars.sub('', text_str).replace(" ", "").replace("　", "").strip()
+    # 制御文字の削除のみ行い、スペースは保持する（前後の空白のみ削除）
+    return illegal_chars.sub('', text_str).strip()
 
 def get_point(pt):
     try:
