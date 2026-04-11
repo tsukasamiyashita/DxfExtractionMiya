@@ -312,6 +312,7 @@ def run_aggregate_data(target_files, save_dir, progress_callback=None, cancel_ch
         agg_header = ["元ファイル名"]
         agg_rows, error_logs = [], []
         total_files = len(target_files)
+        col_formats = {}
 
         for i, f in enumerate(target_files):
             # 中止チェック
@@ -325,29 +326,42 @@ def run_aggregate_data(target_files, save_dir, progress_callback=None, cancel_ch
             try:
                 wb = openpyxl.load_workbook(f, data_only=True)
                 sheet = wb.worksheets[0]
-                rows = list(sheet.iter_rows(values_only=True))
+                rows_cells = list(sheet.iter_rows())
                 wb.close()
 
-                if not rows: continue
-                valid_rows = [r for r in rows if any(c is not None and str(c).strip() != "" for c in r)]
-                if not valid_rows: continue
+                if not rows_cells: continue
+                valid_rows_cells = [r for r in rows_cells if any(c.value is not None and str(c.value).strip() != "" for c in r)]
+                if not valid_rows_cells: continue
 
-                curr_header, curr_data = valid_rows[0], valid_rows[1:]
-                safe_header = [str(h).strip() if h is not None and str(h).strip() else f"列{idx+1}" for idx, h in enumerate(curr_header)]
+                curr_header_cells, curr_data_cells = valid_rows_cells[0], valid_rows_cells[1:]
+                safe_header = [str(h.value).strip() if h.value is not None and str(h.value).strip() else f"列{idx+1}" for idx, h in enumerate(curr_header_cells)]
                 col_mapping = {}
 
                 for idx, h in enumerate(safe_header):
                     if h not in agg_header: agg_header.append(h)
                     col_mapping[idx] = agg_header.index(h)
 
-                for r in curr_data:
+                for r_cells in curr_data_cells:
                     row = [""] * len(agg_header)
                     row[0] = fname
-                    for idx, val in enumerate(r):
+                    for idx, cell in enumerate(r_cells):
                         if idx in col_mapping:
                             mapped_idx = col_mapping[idx]
+                            
+                            if mapped_idx not in col_formats or col_formats[mapped_idx] == 'General':
+                                if cell.number_format and cell.number_format != 'General':
+                                    col_formats[mapped_idx] = cell.number_format
+                                    
                             if mapped_idx >= len(row): row.extend([""] * (mapped_idx - len(row) + 1))
-                            row[mapped_idx] = "" if val is None or str(val).strip() == "None" else str(val).strip()
+                            
+                            val = cell.value
+                            if val is None or str(val).strip() == "None":
+                                row[mapped_idx] = ""
+                            else:
+                                if isinstance(val, str):
+                                    row[mapped_idx] = val.strip()
+                                else:
+                                    row[mapped_idx] = val
                     agg_rows.append(row)
             except Exception as e:
                 error_logs.append(f"【{fname}】スキップ: {e}")
@@ -366,6 +380,10 @@ def run_aggregate_data(target_files, save_dir, progress_callback=None, cancel_ch
         apply_text_inheritance(final_data)
 
         for row_data in final_data: ws.append(row_data)
+
+        for col_idx, fmt in col_formats.items():
+            for row_idx in range(2, len(final_data) + 1):
+                ws.cell(row=row_idx, column=col_idx + 1).number_format = fmt
 
         for col in ws.columns:
             try:
