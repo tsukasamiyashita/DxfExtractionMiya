@@ -6,6 +6,7 @@ DxfExtractionMiya v1.0.0
 """
 
 import os
+import sys
 import re
 import traceback
 import json
@@ -493,6 +494,50 @@ def aggregate_data():
     thread.start()
     check_thread()
 
+# ==========================
+# メニュー用関数群
+# ==========================
+def show_readme():
+    readme_path = None
+    # PyInstaller環境の展開先(_MEIPASS)か、開発環境のカレントディレクトリを基準にする
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    
+    for fname in ["README.md", "readme.md"]:
+        p = os.path.join(base_path, fname)
+        if os.path.exists(p):
+            readme_path = p
+            break
+            
+    if not readme_path:
+        messagebox.showerror("エラー", "READMEファイルが見つかりません。")
+        return
+        
+    try:
+        with open(readme_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception as e:
+        messagebox.showerror("エラー", f"READMEの読み込みに失敗しました。\n{e}")
+        return
+        
+    readme_win = Toplevel(root)
+    readme_win.title("README (使い方)")
+    readme_win.geometry("700x600")
+    
+    text_widget = Text(readme_win, wrap=WORD, font=("Meiryo UI", 10))
+    scrollbar = ttk.Scrollbar(readme_win, command=text_widget.yview)
+    text_widget.configure(yscrollcommand=scrollbar.set)
+    
+    scrollbar.pack(side=RIGHT, fill=Y)
+    text_widget.pack(side=LEFT, fill=BOTH, expand=True, padx=(10, 0), pady=10)
+    
+    text_widget.insert(END, content)
+    text_widget.config(state=DISABLED) # 読み取り専用
+
+def show_version():
+    messagebox.showinfo(
+        "バージョン情報", 
+        f"{APP_TITLE}\nバージョン: {VERSION}\n\nDXFテキスト抽出 ＆ Excelスマート集約ツール"
+    )
 
 # ==========================
 # UI構築
@@ -502,6 +547,15 @@ root.title(f"{APP_TITLE} {VERSION}")
 root.geometry("860x850")
 root.minsize(800, 600)
 root.configure(bg="#F8F9FA")
+
+# メニューバーの構築
+menu_bar = Menu(root)
+root.config(menu=menu_bar)
+
+help_menu = Menu(menu_bar, tearoff=0)
+menu_bar.add_cascade(label="ヘルプ", menu=help_menu)
+help_menu.add_command(label="README (使い方)", command=show_readme)
+help_menu.add_command(label="バージョン情報", command=show_version)
 
 style = ttk.Style()
 style.theme_use("clam")
