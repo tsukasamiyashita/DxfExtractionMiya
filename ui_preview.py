@@ -7,6 +7,7 @@ import sys
 import math
 import re
 import json
+import ctypes
 from tkinter import *
 from tkinter import messagebox
 from tkinter import ttk
@@ -18,11 +19,22 @@ class PreviewDialog(Toplevel):
         self.title(f"プレビュー＆範囲選択 - {os.path.basename(dxf_path)}")
         self.geometry("1200x800")
         
+        # Windowsタスクバー用アイコン設定の強制適用
+        try:
+            myappid = 'tsukasamiyashita.dxfextractionmiya.app.1.1'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        except Exception:
+            pass
+            
         base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
         icon_path = os.path.join(base_path, "icon.ico")
         if os.path.exists(icon_path):
             try:
+                # プレビュー画面と親画面（メインウィンドウ）の両方に適用
                 self.iconbitmap(default=icon_path)
+                self.iconbitmap(icon_path)
+                parent.iconbitmap(default=icon_path)
+                parent.iconbitmap(icon_path)
             except Exception:
                 pass
         
