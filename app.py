@@ -9,6 +9,8 @@ import os
 import re
 import traceback
 import json
+import threading
+import queue
 from tkinter import *
 from tkinter import filedialog, messagebox
 from tkinter import ttk
@@ -30,6 +32,52 @@ current_mode = None  # "file" or "folder"
 base_kw_var = None
 base_kw2_var = None
 base_dist_var = None
+
+# ==========================
+# プログレスダイアログ
+# ==========================
+class ProgressWindow(Toplevel):
+    def __init__(self, parent, title="処理中"):
+        super().__init__(parent)
+        self.title(title)
+        self.geometry("450x180")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        
+        # キャンセル用フラグ
+        self.cancel_event = threading.Event()
+        
+        self.update_idletasks()
+        x = parent.winfo_x() + (parent.winfo_width() // 2) - (450 // 2)
+        y = parent.winfo_y() + (parent.winfo_height() // 2) - (180 // 2)
+        self.geometry(f"+{x}+{y}")
+        
+        self.protocol("WM_DELETE_WINDOW", self.on_cancel)
+        
+        self.lbl_status = Label(self, text="準備中...", font=("Meiryo UI", 9))
+        self.lbl_status.pack(pady=(15, 5))
+        
+        self.progress = ttk.Progressbar(self, orient=HORIZONTAL, length=400, mode='determinate')
+        self.progress.pack(pady=10)
+        
+        self.btn_cancel = Button(self, text="中止", command=self.on_cancel, bg="#DC3545", fg="white", font=("Meiryo UI", 10, "bold"), padx=20)
+        self.btn_cancel.pack(pady=10)
+        
+    def on_cancel(self):
+        if self.cancel_event.is_set():
+            return
+        if messagebox.askyesno("確認", "処理を中断しますか？", parent=self):
+            self.cancel_event.set()
+            self.lbl_status.config(text="停止しています...")
+            self.btn_cancel.config(state=DISABLED, text="停止中")
+
+    def update_progress(self, current, total, text):
+        if self.cancel_event.is_set():
+            return
+        self.progress["maximum"] = total
+        self.progress["value"] = current
+        self.lbl_status.config(text=text)
 
 # ==========================
 # 選択処理
@@ -360,7 +408,41 @@ def extract_dxf_text():
             "exclude": exclude_str
         })
 
-    run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_kw_str, base_kw2_str, base_dist, keyword_settings)
+    prog_win = ProgressWindow(root, "DXFテキスト抽出")
+    result_queue = queue.Queue()
+
+    def callback(current, total, text):
+        root.after(0, lambda: prog_win.update_progress(current, total, text))
+        
+    def task():
+        try:
+            res = run_extract_dxf(
+                target_files, save_dir, is_keyword_mode, y_threshold, 
+                base_kw_str, base_kw2_str, base_dist, keyword_settings, 
+                progress_callback=callback, cancel_check=prog_win.cancel_event.is_set
+            )
+            result_queue.put(("success", res))
+        except Exception as e:
+            result_queue.put(("error", traceback.format_exc()))
+
+    def check_thread():
+        if thread.is_alive():
+            root.after(100, check_thread)
+        else:
+            prog_win.destroy()
+            status, res = result_queue.get()
+            if status == "success":
+                success, msg = res
+                if success:
+                    messagebox.showinfo("完了", msg)
+                else:
+                    messagebox.showwarning("結果", msg)
+            else:
+                messagebox.showerror("抽出エラー", res)
+
+    thread = threading.Thread(target=task, daemon=True)
+    thread.start()
+    check_thread()
 
 def aggregate_data():
     target_files = []
@@ -376,7 +458,40 @@ def aggregate_data():
     save_dir = get_save_dir(target_files[0])
     if not save_dir: return
 
-    run_aggregate_data(target_files, save_dir)
+    prog_win = ProgressWindow(root, "Excelスマート集約")
+    result_queue = queue.Queue()
+
+    def callback(current, total, text):
+        root.after(0, lambda: prog_win.update_progress(current, total, text))
+
+    def task():
+        try:
+            res = run_aggregate_data(
+                target_files, save_dir, 
+                progress_callback=callback, cancel_check=prog_win.cancel_event.is_set
+            )
+            result_queue.put(("success", res))
+        except Exception as e:
+            result_queue.put(("error", traceback.format_exc()))
+
+    def check_thread():
+        if thread.is_alive():
+            root.after(100, check_thread)
+        else:
+            prog_win.destroy()
+            status, res = result_queue.get()
+            if status == "success":
+                success, msg = res
+                if success:
+                    messagebox.showinfo("完了", msg)
+                else:
+                    messagebox.showwarning("結果", msg)
+            else:
+                messagebox.showerror("集約エラー", res)
+
+    thread = threading.Thread(target=task, daemon=True)
+    thread.start()
+    check_thread()
 
 
 # ==========================
