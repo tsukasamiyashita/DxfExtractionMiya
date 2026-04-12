@@ -29,7 +29,7 @@ jobs:
     - name: Build with PyInstaller
       shell: pwsh
       run: |
-        $cmd = "pyinstaller --onefile --noconsole --clean --name `"DxfExtractionMiya-v1.1.0`""
+        $cmd = "pyinstaller --onefile --noconsole --clean --name `"DxfExtractionMiya-v1.2.0`""
         
         # READMEの存在確認 (大文字・小文字両対応)
         if (Test-Path "README.md") { $cmd += " --add-data `"README.md;.`"" }
@@ -46,5 +46,5 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: DxfExtractionMiya-v1.1.0
-        path: dist/DxfExtractionMiya-v1.1.0.exe
+        name: DxfExtractionMiya-v1.2.0
+        path: dist/DxfExtractionMiya-v1.2.0.exe

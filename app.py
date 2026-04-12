@@ -24,7 +24,7 @@ from app_logic import run_extract_dxf
 # 共通変数
 # ==========================
 APP_TITLE = "DxfExtractionMiya"
-VERSION = "v1.1.0"
+VERSION = "v1.2.0"
 
 selected_files = []
 selected_folder = ""
@@ -281,8 +281,12 @@ def _apply_settings_dict(settings, apply_env=False):
         base_dist_var.set(settings["base_dist"])
         
     if "keywords" in settings:
-        for row in list(keyword_ui_frames):
-            row.destroy()
+        global kw_list_frame
+        kw_list_frame.destroy()
+        
+        kw_list_frame = Frame(kw_container, bg="#F0F4F8")
+        kw_list_frame.pack(fill=X, pady=5)
+        
         keyword_entries.clear()
         keyword_ui_frames.clear()
         
@@ -679,7 +683,7 @@ root = Tk()
 
 # --- ウィンドウアイコンとタスクバーアイコンの設定 ---
 try:
-    myappid = 'tsukasamiyashita.dxfextractionmiya.app.1.1'
+    myappid = 'tsukasamiyashita.dxfextractionmiya.app.1.2'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 except Exception:
     pass
@@ -838,11 +842,16 @@ def clear_all_keywords():
     if not keyword_entries:
         return
     if messagebox.askyesno("確認", "追加されたすべての抽出項目をクリアしますか？"):
-        for row in list(keyword_ui_frames):
-            row.destroy()
+        global kw_list_frame
+        kw_list_frame.destroy()
+        
+        kw_list_frame = Frame(kw_container, bg="#F0F4F8")
+        kw_list_frame.pack(fill=X, pady=5)
+        
         keyword_entries.clear()
         keyword_ui_frames.clear()
-        root.update_idletasks()
+        
+        root.update()
         canvas.configure(scrollregion=canvas.bbox("all"))
 
 Button(kw_btn_frame, text="🗑 すべてクリア", command=clear_all_keywords, bg="#DC3545", fg="white", font=("Meiryo UI", 9, "bold"), padx=10).pack(side=LEFT, padx=10)
