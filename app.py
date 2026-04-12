@@ -35,6 +35,9 @@ base_kw_var = None
 base_kw2_var = None
 base_dist_var = None
 
+current_extract_settings_file = None
+last_saved_settings_str = None
+
 # ==========================
 # プログレスダイアログ
 # ==========================
@@ -185,6 +188,44 @@ def _get_current_settings_dict():
         "keywords": kw_list
     }
 
+def get_extract_params_for_compare():
+    try:
+        settings = _get_current_settings_dict()
+        return {
+            "mode": settings.get("mode"),
+            "save_option": settings.get("save_option"),
+            "threshold": settings.get("threshold"),
+            "base_kw": settings.get("base_kw"),
+            "base_kw2": settings.get("base_kw2"),
+            "base_dist": settings.get("base_dist"),
+            "keywords": settings.get("keywords")
+        }
+    except Exception:
+        return {}
+
+def update_extract_file_display():
+    if 'lbl_current_extract_file' not in globals():
+        return
+        
+    if not current_extract_settings_file:
+        lbl_current_extract_file.config(text="【現在の設定ファイル】 ---", fg="#6C757D", font=("Meiryo UI", 9))
+    else:
+        try:
+            current_json = json.dumps(get_extract_params_for_compare(), sort_keys=True)
+            if current_json != last_saved_settings_str:
+                lbl_current_extract_file.config(text=f"【現在の設定ファイル】 {os.path.basename(current_extract_settings_file)} (変更あり)", fg="#DC3545", font=("Meiryo UI", 9, "bold"))
+            else:
+                lbl_current_extract_file.config(text=f"【現在の設定ファイル】 {os.path.basename(current_extract_settings_file)}", fg="#198754", font=("Meiryo UI", 9))
+        except Exception:
+            pass
+
+def check_settings_loop():
+    update_extract_file_display()
+    try:
+        root.after(1000, check_settings_loop)
+    except:
+        pass
+
 def _apply_settings_dict(settings, apply_env=False):
     global current_mode, selected_files, selected_folder
     
@@ -271,6 +312,25 @@ def _apply_settings_dict(settings, apply_env=False):
     root.update_idletasks()
     canvas.configure(scrollregion=canvas.bbox("all"))
 
+def _auto_save_last_extract_file(filepath):
+    try:
+        user_dir = os.path.expanduser('~')
+        app_dir = os.path.join(user_dir, 'DxfExtractionMiya')
+        os.makedirs(app_dir, exist_ok=True)
+        settings_file = os.path.join(app_dir, 'settings.json')
+        
+        settings = {}
+        if os.path.exists(settings_file):
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+                
+        settings["last_extract_file"] = filepath
+        
+        with open(settings_file, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
 def save_env_settings():
     try:
         user_dir = os.path.expanduser('~')
@@ -279,6 +339,7 @@ def save_env_settings():
         settings_file = os.path.join(app_dir, 'settings.json')
         
         settings = _get_current_settings_dict()
+        settings["last_extract_file"] = current_extract_settings_file
         
         with open(settings_file, 'w', encoding='utf-8') as f:
             json.dump(settings, f, ensure_ascii=False, indent=2)
@@ -300,6 +361,36 @@ def load_env_settings():
             settings = json.load(f)
             
         _apply_settings_dict(settings, apply_env=True)
+        
+        global current_extract_settings_file, last_saved_settings_str
+        if "last_extract_file" in settings and settings["last_extract_file"]:
+            fpath = settings["last_extract_file"]
+            if os.path.exists(fpath):
+                current_extract_settings_file = fpath
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as ef:
+                        f_settings = json.load(ef)
+                    cmp_dict = {
+                        "mode": f_settings.get("mode"),
+                        "save_option": f_settings.get("save_option"),
+                        "threshold": f_settings.get("threshold"),
+                        "base_kw": f_settings.get("base_kw"),
+                        "base_kw2": f_settings.get("base_kw2"),
+                        "base_dist": f_settings.get("base_dist"),
+                        "keywords": f_settings.get("keywords")
+                    }
+                    last_saved_settings_str = json.dumps(cmp_dict, sort_keys=True)
+                except Exception:
+                    last_saved_settings_str = json.dumps(get_extract_params_for_compare(), sort_keys=True)
+                
+                update_extract_file_display()
+                return
+                    
+        # 最後に使用したファイルがない場合は未選択扱い
+        current_extract_settings_file = None
+        last_saved_settings_str = json.dumps(get_extract_params_for_compare(), sort_keys=True)
+        update_extract_file_display()
+            
     except Exception as e:
         pass # 起動時の自動読込はエラーを出さずにスキップ
 
@@ -325,6 +416,13 @@ def save_extract_settings():
         with open(settings_file, 'w', encoding='utf-8') as f:
             json.dump(settings, f, ensure_ascii=False, indent=2)
             
+        global current_extract_settings_file, last_saved_settings_str
+        current_extract_settings_file = settings_file
+        last_saved_settings_str = json.dumps(get_extract_params_for_compare(), sort_keys=True)
+        update_extract_file_display()
+        
+        _auto_save_last_extract_file(settings_file)
+            
         messagebox.showinfo("保存完了", f"抽出設定を保存しました。\n保存先: {settings_file}")
     except Exception as e:
         messagebox.showerror("保存エラー", f"抽出設定の保存中にエラーが発生しました。\n{e}")
@@ -347,6 +445,14 @@ def load_extract_settings():
             settings = json.load(f)
             
         _apply_settings_dict(settings, apply_env=False)
+        
+        global current_extract_settings_file, last_saved_settings_str
+        current_extract_settings_file = settings_file
+        last_saved_settings_str = json.dumps(get_extract_params_for_compare(), sort_keys=True)
+        update_extract_file_display()
+        
+        _auto_save_last_extract_file(settings_file)
+        
         messagebox.showinfo("読込完了", "抽出設定を読み込みました。")
     except Exception as e:
         messagebox.showerror("読込エラー", f"抽出設定の読込中にエラーが発生しました。\n{e}")
@@ -678,6 +784,10 @@ Label(settings_frame, text="【DXF抽出 詳細設定】", font=("Meiryo UI", 9,
 # --- 抽出設定 保存・読込エリア ---
 settings_btn_frame = Frame(settings_frame, bg="#FFFFFF")
 settings_btn_frame.pack(fill=X, pady=(0, 10))
+
+lbl_current_extract_file = Label(settings_btn_frame, text="【現在の設定ファイル】 ---", font=("Meiryo UI", 9), bg="#FFFFFF", fg="#6C757D")
+lbl_current_extract_file.pack(side=LEFT, padx=0)
+
 Button(settings_btn_frame, text="💾 現在の抽出設定を保存", command=save_extract_settings, bg="#E9ECEF", relief=GROOVE).pack(side=RIGHT, padx=2)
 Button(settings_btn_frame, text="📂 保存した抽出設定を読込", command=load_extract_settings, bg="#E9ECEF", relief=GROOVE).pack(side=RIGHT, padx=2)
 # ------------------------
@@ -871,4 +981,5 @@ btn_extract.pack(fill=X, pady=5)
 if __name__ == "__main__":
     # 起動時の自動読込処理 (UI構築直後に実行)
     root.after(100, load_env_settings)
+    root.after(1000, check_settings_loop)
     root.mainloop()
