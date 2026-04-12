@@ -7,6 +7,7 @@ import math
 import time
 import traceback
 import re
+import datetime
 import openpyxl
 from openpyxl.styles import numbers
 from dxf_core import get_all_elements_from_dxf, apply_text_inheritance, zen_to_han_alnum
@@ -33,6 +34,28 @@ def _convert_value_for_excel(val_str, format_type):
             return float(clean_str) / 100.0 if "%" not in val_str else float(clean_str)
         except ValueError:
             return val_str
+            
+    if format_type == "日付":
+        nums = re.findall(r'\d+', val_str)
+        if len(nums) >= 3:
+            try:
+                y, m, d = int(nums[0]), int(nums[1]), int(nums[2])
+                if y < 100: y += 2000
+                return datetime.date(y, m, d)
+            except ValueError:
+                pass
+        return val_str
+
+    if format_type == "時刻":
+        nums = re.findall(r'\d+', val_str)
+        if len(nums) >= 2:
+            try:
+                h, m = int(nums[0]), int(nums[1])
+                s = int(nums[2]) if len(nums) >= 3 else 0
+                return datetime.time(h, m, s)
+            except ValueError:
+                pass
+        return val_str
             
     return val_str
 
