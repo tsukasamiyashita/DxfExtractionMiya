@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-DxfExtractionMiya v1.0.0
+DxfExtractionMiya v1.3.0
 機能：DXFファイルからのプレビュー＆テキスト抽出（マウスで範囲指定・連続追加）、設定保存
 メインアプリケーションモジュール
 """
@@ -24,7 +24,7 @@ from app_logic import run_extract_dxf
 # 共通変数
 # ==========================
 APP_TITLE = "DxfExtractionMiya"
-VERSION = "v1.2.0"
+VERSION = "v1.3.0"
 
 selected_files = []
 selected_folder = ""
@@ -683,7 +683,7 @@ root = Tk()
 
 # --- ウィンドウアイコンとタスクバーアイコンの設定 ---
 try:
-    myappid = 'tsukasamiyashita.dxfextractionmiya.app.1.2'
+    myappid = 'tsukasamiyashita.dxfextractionmiya.app.1.3'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 except Exception:
     pass

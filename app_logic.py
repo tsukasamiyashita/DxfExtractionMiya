@@ -10,7 +10,7 @@ import re
 import datetime
 import openpyxl
 from openpyxl.styles import numbers
-from dxf_core import get_all_elements_from_dxf, apply_text_inheritance, zen_to_han_alnum
+from dxf_core import get_all_elements_from_dxf, apply_text_inheritance, zen_to_han
 
 def _convert_value_for_excel(val_str, format_type):
     if not val_str:
@@ -71,8 +71,8 @@ def run_extract_dxf(target_files, save_dir, is_keyword_mode, y_threshold, base_k
             if not keyword_settings:
                 return False, "抽出設定（抽出範囲）がありません。「＋ プレビューを開いて基準文字と抽出範囲を設定」から設定を行ってください。"
 
-            base_kw_str = zen_to_han_alnum(base_kw_str)
-            base_kw2_str = zen_to_han_alnum(base_kw2_str)
+            base_kw_str = zen_to_han(base_kw_str)
+            base_kw2_str = zen_to_han(base_kw2_str)
 
             out_wb = openpyxl.Workbook()
             ws = out_wb.active

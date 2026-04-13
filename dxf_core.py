@@ -6,11 +6,32 @@ import re
 import ezdxf
 from ezdxf import recover
 
-def zen_to_han_alnum(text):
+def zen_to_han(text):
     if not isinstance(text, str): return text
+    # 英数字・記号の変換
     zen = "０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
     han = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    return text.translate(str.maketrans(zen, han))
+    zen += "！＂＃＄％＆＇（）＊＋，－．／：；＜＝＞？［＼］＾＿｀｛｜｝"
+    han += "!\"#$%&'()*+,-./:;<=>?[\\]^_`{|}"
+    zen += "　"
+    han += " "
+    res = text.translate(str.maketrans(zen, han))
+    
+    # 全角カタカナ -> 半角カタカナの変換
+    # 2文字（濁点・半濁点）になるものを先に処理
+    zen_kana_d = "ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポヴ"
+    han_kana_d = ["ｶﾞ","ｷﾞ","ｸﾞ","ｹﾞ","ｺﾞ","ｻﾞ","ｼﾞ","ｽﾞ","ｾﾞ","ｿﾞ","ﾀﾞ","ﾁﾞ","ﾂﾞ","ﾃﾞ","ﾄﾞ","ﾊﾞ","ﾋﾞ","ﾌﾞ","ﾍﾞ","ﾎﾞ","ﾊﾟ","ﾋﾟ","ﾌﾟ","ﾍﾟ","ﾎﾟ","ｳﾞ"]
+    for z, h in zip(zen_kana_d, han_kana_d):
+        res = res.replace(z, h)
+        
+    zen_kana_s = "ァアィイゥウェエォオカキクケコサシスセソタチッツテトナニヌネノハヒフヘホマミムメモャヤュユョヨラリルレロヮワヰヱヲンヵヶー。、・「」"
+    han_kana_s = "ｧｱｨｲｩｳｪｴｫｵｶｷｸｹｺｻｼｽｾｿﾀﾁｯﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓｬﾔｭﾕｮﾖﾗﾘﾙﾚﾛﾜﾜｲｴｦﾝｶｹｰ｡､･｢｣"
+    res = res.translate(str.maketrans(zen_kana_s, han_kana_s))
+    
+    return res
+
+# 後方互換性のため
+zen_to_han_alnum = zen_to_han
 
 def sanitize_text(text):
     if text is None: return ""
@@ -18,7 +39,7 @@ def sanitize_text(text):
     illegal_chars = re.compile(r'[\000-\010]|[\013-\014]|[\016-\037]')
     # 制御文字の削除のみ行い、スペースは保持する（前後の空白のみ削除）
     cleaned = illegal_chars.sub('', text_str).strip()
-    return zen_to_han_alnum(cleaned)
+    return zen_to_han(cleaned)
 
 def get_point(pt):
     try:
